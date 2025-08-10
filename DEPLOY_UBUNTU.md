@@ -1,6 +1,7 @@
 # 🚀 Hướng dẫn Deploy Backend lên Ubuntu Server
 
 ## 📋 Yêu cầu hệ thống
+
 - Ubuntu 20.04 LTS hoặc mới hơn
 - 1GB RAM tối thiểu
 - 10GB disk space
@@ -222,7 +223,8 @@ sudo systemctl restart mongod
 
 ## 🚨 Troubleshooting
 
-### Nếu ứng dụng không start:
+### Nếu ứng dụng không start
+
 ```bash
 # Kiểm tra logs
 pm2 logs hydrology-backend
@@ -234,7 +236,8 @@ sudo netstat -tlnp | grep :5000
 sudo systemctl status mongod
 ```
 
-### Nếu Nginx không hoạt động:
+### Nếu Nginx không hoạt động
+
 ```bash
 # Kiểm tra cấu hình
 sudo nginx -t
@@ -243,7 +246,8 @@ sudo nginx -t
 sudo tail -f /var/log/nginx/error.log
 ```
 
-### Nếu MongoDB không kết nối:
+### Nếu MongoDB không kết nối
+
 ```bash
 # Kiểm tra service
 sudo systemctl status mongod
@@ -255,13 +259,15 @@ sudo netstat -tlnp | grep :27017
 sudo systemctl restart mongod
 ```
 
-## ✅ Hoàn thành!
+## ✅ Hoàn thành
 
 Sau khi hoàn thành tất cả các bước, backend của bạn sẽ chạy tại:
-- **Local**: http://localhost:5000
-- **Public**: http://your-domain.com (nếu có domain)
+
+- **Local**: <http://localhost:5000>
+- **Public**: <http://your-domain.com> (nếu có domain)
 
 API endpoints:
+
 - Health check: `GET /api/v1/health`
 - Real-time data: `GET /api/v1/get-tide-data-from-now`
-- Locations: `GET /api/v1/get-locations` 
+- Locations: `GET /api/v1/get-locations`

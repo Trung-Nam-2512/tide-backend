@@ -13,7 +13,12 @@ const tideSchema = new mongoose.Schema({
     location: {
         type: String,
         required: true
-    }
+    },
+    stationCode: {
+        type: String,
+        required: true
+    },
+
 }, { timestamps: true });
 
 // Tạo compound index để đảm bảo unique cho date + location

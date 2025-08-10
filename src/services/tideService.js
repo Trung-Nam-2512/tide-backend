@@ -270,9 +270,16 @@ const fetchTideData = async (location) => {
     }
 }
 
+
+
+
+
+
+
 module.exports = {
     fetchTideData,
     getTideDataFromNow,
     getTideDataByDateRange,
-    getRecentTideData
+    getRecentTideData,
+  
 }

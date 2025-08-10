@@ -61,8 +61,76 @@ const parseRawData = (rawData) => {
         console.error('Error parsing raw data:', error.message);
         throw new Error(`Failed to parse data: ${error.message}`);
     }
+
+
+
 };
+// part data realy api 
+/**
+ * Helper chuyển đổi dữ liệu API từ định dạng /Date(xxxxx)/ sang thời gian đọc được
+ * @param {Array} apiData - Dữ liệu đầu vào từ API
+ * @returns {Array} - Danh sách đối tượng với thời gian đã được định dạng
+ */
+
+const convertApiData = (apiData) => {
+    const formatterVN = new Intl.DateTimeFormat('vi-VN', {
+        timeZone: 'Asia/Ho_Chi_Minh',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    });
+
+    return apiData.map(entry => {
+        const match = entry.ThoiGian.match(/\/Date\((\d+)\)\//);
+        const millis = match ? parseInt(match[1], 10) : null;
+
+        const dateUTC = millis ? new Date(millis) : null;
+
+        const convertedValue = entry.GiaTri * 100; // Chuyển đổi từ mét sang cm (1m = 100cm)
+        console.log(`🔄 Chuyển đổi: ${entry.GiaTri}m → ${convertedValue}cm`);
+
+        return {
+            GiaTri: convertedValue,
+            Timestamp: millis,
+            UTC: dateUTC ? dateUTC.toISOString() : null,
+            GioVietNam: dateUTC ? formatterVN.format(dateUTC) : null
+        };
+    });
+}
+
+/**
+ * Lọc bỏ các giá trị trùng lặp dựa trên timestamp
+ * @param {Array} data - Dữ liệu đầu vào đã được convert
+ * @returns {Array} - Dữ liệu đã lọc bỏ trùng lặp
+ */
+const removeDuplicateData = (data) => {
+    if (!Array.isArray(data)) {
+        return data;
+    }
+
+    const uniqueMap = new Map();
+
+    data.forEach(item => {
+        if (item && item.Timestamp !== null && item.Timestamp !== undefined) {
+            // Sử dụng timestamp làm key để đảm bảo duy nhất
+            if (!uniqueMap.has(item.Timestamp)) {
+                uniqueMap.set(item.Timestamp, item);
+            }
+        }
+    });
+
+    // Chuyển Map về Array và sắp xếp theo timestamp
+    const uniqueData = Array.from(uniqueMap.values());
+    return uniqueData.sort((a, b) => a.Timestamp - b.Timestamp);
+}
+
+
 module.exports = {
     parseDateString,
-    parseRawData
+    parseRawData,
+    convertApiData,
+    removeDuplicateData,
 }

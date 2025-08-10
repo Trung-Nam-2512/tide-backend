@@ -1,7 +1,6 @@
 const config = {
     mongo: {
         url: process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/project-water-level-forecast',
-
     },
     api: {
         tide: {
