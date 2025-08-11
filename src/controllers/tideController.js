@@ -289,6 +289,7 @@ const getLocationCoordinates = (code) => {
         'PHUAN': [10.780554, 106.711439],
         'BIENHOA': [10.933065, 106.818923],
         'THUDAUMOT': [10.980568, 106.649706],
+        // "HODAUTIENG"
         'VAMKENH': [10.269888, 106.740194],
         'BENLUC': [10.634111, 106.478556],
         'BINHDAI': [10.197028, 106.711222],

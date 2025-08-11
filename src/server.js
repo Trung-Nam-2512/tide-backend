@@ -42,13 +42,14 @@ app.get('/', (req, res) => {
             getDataFromNow: '/api/v1/get-tide-data-from-now',
             getRecentData: '/api/v1/get-recent-tide-data',
             locations: '/api/v1/get-locations',
-            combinedData: '/api/v1/get-combined-tide-data'
+            combinedData: '/api/v1/get-combined-tide-data',
+            forceFetchAll: '/api/v1/fetch-tide-realy-all'
         },
         features: {
             realTime: 'Dữ liệu thủy triều từ thời điểm hiện tại đến 1 tuần sau',
             recentData: 'Dữ liệu thủy triều gần nhất (real-time)',
             multipleLocations: 'Hỗ trợ nhiều địa điểm',
-            scheduledData: 'Tự động gọi API thủy triều thực tế 3 lần/ngày (00:00, 08:00, 16:00)'
+            scheduledData: 'Tự động gọi API thủy triều thực tế mỗi 3 giờ (0h, 3h, 6h, 9h, 12h, 15h, 18h, 21h)'
         },
         timestamp: new Date().toISOString()
     });
@@ -84,10 +85,10 @@ const server = app.listen(PORT, () => {
 
     // Khởi tạo Tide Data Scheduler sau khi server đã sẵn sàng
     console.log('⏰ Khởi tạo Tide Data Scheduler...');
-    const schedulerJob = initScheduler();
+    const { job: tideJob, stationUpdateJob } = initScheduler();
 
-    // Lưu job reference để có thể dừng khi cần
-    global.schedulerJob = schedulerJob;
+    // Lưu job references để có thể dừng khi cần
+    global.schedulerJobs = { tideJob, stationUpdateJob };
 });
 
 // Graceful shutdown
@@ -95,9 +96,11 @@ process.on('SIGTERM', () => {
     console.log('🛑 SIGTERM received, shutting down gracefully');
 
     // Dừng scheduler nếu có
-    if (global.schedulerJob) {
-        global.schedulerJob.stop();
-        console.log('⏹️ Tide Data Scheduler đã được dừng');
+    if (global.schedulerJobs) {
+        const { tideJob, stationUpdateJob } = global.schedulerJobs;
+        if (tideJob) tideJob.stop();
+        if (stationUpdateJob) stationUpdateJob.stop();
+        console.log('⏹️ Tide Data Scheduler và Station Update Scheduler đã được dừng');
     }
 
     server.close(() => {
@@ -111,9 +114,11 @@ process.on('SIGINT', () => {
     console.log('🛑 SIGINT received, shutting down gracefully');
 
     // Dừng scheduler nếu có
-    if (global.schedulerJob) {
-        global.schedulerJob.stop();
-        console.log('⏹️ Tide Data Scheduler đã được dừng');
+    if (global.schedulerJobs) {
+        const { tideJob, stationUpdateJob } = global.schedulerJobs;
+        if (tideJob) tideJob.stop();
+        if (stationUpdateJob) stationUpdateJob.stop();
+        console.log('⏹️ Tide Data Scheduler và Station Update Scheduler đã được dừng');
     }
 
     server.close(() => {

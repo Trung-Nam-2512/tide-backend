@@ -1,3 +1,6 @@
+const dotenv = require('dotenv');
+dotenv.config();
+
 module.exports = {
     apps: [{
         name: 'hydrology-backend',
@@ -10,12 +13,12 @@ module.exports = {
         env: {
             NODE_ENV: 'development',
             PORT: 1423,
-            MONGO_URI: 'mongodb://trungnam:TrungNamLinux%4001@127.0.0.1:27017/project-water-level-forecast'
+            MONGO_URI: process.env.MONGO_URI
         },
         env_production: {
             NODE_ENV: 'production',
             PORT: 1423,
-            MONGO_URI: 'mongodb://trungnam:TrungNamLinux%4001@127.0.0.1:27017/project-water-level-forecast'
+            MONGO_URI: process.env.MONGO_URI
         },
         error_file: './logs/err.log',
         out_file: './logs/out.log',

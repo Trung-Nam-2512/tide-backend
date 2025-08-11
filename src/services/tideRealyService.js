@@ -18,15 +18,14 @@ const getCurrentVietnamTime = () => {
     return vietnamTime;
 };
 
-// Hàm kiểm tra xem có phải giờ gọi API không (00:00, 08:00, 16:00)
+// Hàm kiểm tra xem có phải giờ gọi API không (mỗi 3 giờ)
 const isScheduledAPITime = () => {
     const now = getCurrentVietnamTime();
     const hour = now.getHours();
     const minute = now.getMinutes();
 
-    // Chỉ gọi API vào các giờ: 00:00, 08:00, 16:00 (với độ lệch ±5 phút)
-    const scheduledHours = [0, 8, 16];
-    const isScheduledHour = scheduledHours.includes(hour);
+    // Chỉ gọi API vào các giờ chia hết cho 3 (với độ lệch ±5 phút)
+    const isScheduledHour = hour % 3 === 0;
     const isWithinTimeWindow = minute >= 0 && minute <= 5; // Cho phép độ lệch 5 phút
 
     return isScheduledHour && isWithinTimeWindow;
@@ -377,26 +376,19 @@ const getCacheStatus = () => {
     return status;
 };
 
-// Hàm tính thời gian gọi API tiếp theo
+// Hàm tính thời gian gọi API tiếp theo (mỗi 3 giờ)
 const getNextScheduledTime = (lastCallTime) => {
-    const scheduledHours = [0, 8, 16];
     const now = getCurrentVietnamTime();
+    const currentHour = now.getHours();
 
-    // Tìm giờ gọi API tiếp theo
-    let nextHour = null;
-    for (const hour of scheduledHours) {
-        if (hour > now.getHours()) {
-            nextHour = hour;
-            break;
-        }
-    }
+    // Tính giờ tiếp theo chia hết cho 3
+    let nextHour = Math.ceil(currentHour / 3) * 3;
 
-    // Nếu không tìm thấy giờ nào trong ngày hôm nay, lấy giờ đầu tiên của ngày mai
-    if (nextHour === null) {
-        nextHour = scheduledHours[0];
+    // Nếu giờ tiếp theo vượt quá 24, reset về 0 giờ ngày hôm sau
+    if (nextHour >= 24) {
         const tomorrow = new Date(now);
         tomorrow.setDate(tomorrow.getDate() + 1);
-        tomorrow.setHours(nextHour, 0, 0, 0);
+        tomorrow.setHours(0, 0, 0, 0);
         return tomorrow;
     }
 
