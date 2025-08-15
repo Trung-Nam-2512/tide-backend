@@ -1,10 +1,10 @@
 const cron = require('node-cron');
-const { getTideRealy } = require('../services/tideRealyService');
+const { getTideRealy, getTideRealyForce } = require('../services/tideRealyService');
 const Tide = require('../models/tideModel');
 
 /**
  * Scheduler để gọi API thủy triều thực tế theo lịch trình cố định
- * Gọi API 3 lần/ngày: 00:00, 08:00, 16:00 (GMT+7)
+ * Gọi API mỗi 1 giờ với force=true để fetch toàn bộ dữ liệu (GMT+7)
  */
 
 // Danh sách các trạm cần gọi API
@@ -14,18 +14,19 @@ const STATIONS = [
 ];
 
 /**
- * Hàm gọi API cho tất cả các trạm
+ * Hàm gọi API cho tất cả các trạm với force=true
  */
-const fetchAllStationsData = async () => {
+const fetchAllStationsData = async (force = false) => {
     console.log('🕐 Bắt đầu lịch trình gọi API thủy triều thực tế...');
     console.log(`⏰ Thời gian: ${new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}`);
+    console.log(`🔥 Force mode: ${force}`);
 
     const results = [];
 
     for (const stationCode of STATIONS) {
         try {
-            console.log(`📡 Đang gọi API cho trạm: ${stationCode}`);
-            const result = await getTideRealy(stationCode);
+            console.log(`📡 Đang gọi API cho trạm: ${stationCode} (force=${force})`);
+            const result = force ? await getTideRealyForce(stationCode) : await getTideRealy(stationCode);
 
             if (result) {
                 results.push({
@@ -91,17 +92,18 @@ const initScheduler = () => {
     // Tải danh sách trạm từ database
     loadStationsFromDB();
 
-    // Lịch trình gọi API: mỗi 3 giờ (GMT+7)
-    // Cron expression: 0 */3 * * * (phút giờ ngày tháng thứ)
-    const cronExpression = '0 */3 * * *';
+    // Lịch trình gọi API: mỗi 1 giờ (GMT+7) - tương tự Hồ Dầu Tiếng
+    // Cron expression: 0 * * * * (phút giờ ngày tháng thứ)
+    const cronExpression = '0 * * * *';
 
-    console.log(`⏰ Lịch trình: ${cronExpression} (mỗi 3 giờ GMT+7)`);
+    console.log(`⏰ Lịch trình: ${cronExpression} (mỗi 1 giờ GMT+7)`);
+    console.log(`🔥 Method: Gọi trực tiếp fetchAllStationsData(force=true)`);
 
-    // Tạo cron job cho việc gọi API
+    // Tạo cron job cho việc gọi API với force=true
     const job = cron.schedule(cronExpression, async () => {
-        console.log('🔔 Đã đến giờ gọi API theo lịch trình!');
+        console.log('🔔 Đã đến giờ gọi API tide realy theo lịch trình!');
         await loadStationsFromDB(); // Cập nhật danh sách trạm trước khi gọi API
-        await fetchAllStationsData();
+        await fetchAllStationsData(true); // force=true để luôn fetch mới
     }, {
         scheduled: true,
         timezone: "Asia/Ho_Chi_Minh"
@@ -116,17 +118,13 @@ const initScheduler = () => {
         timezone: "Asia/Ho_Chi_Minh"
     });
 
-    // Gọi API ngay lập tức khi khởi động nếu đúng vào thời điểm chia hết cho 3 giờ
-    const now = new Date();
-    const currentHour = now.getHours();
-
-    if (currentHour % 3 === 0) {
-        console.log('🚀 Khởi động ngay lập tức vì đang trong giờ gọi API...');
-        setTimeout(async () => {
-            await loadStationsFromDB();
-            await fetchAllStationsData();
-        }, 5000); // Delay 5 giây để đảm bảo hệ thống đã sẵn sàng
-    }
+    // Gọi API ngay lập tức khi khởi động (sau 10 giây) với force=true
+    console.log('🚀 Sẽ fetch dữ liệu tide realy sau 10 giây...');
+    setTimeout(async () => {
+        console.log('🎬 Fetch dữ liệu tide realy lần đầu với force=true...');
+        await loadStationsFromDB();
+        await fetchAllStationsData(true); // force=true để luôn fetch mới
+    }, 10000); // Delay 10 giây để đảm bảo hệ thống đã sẵn sàng
 
     console.log('✅ Tide Data Scheduler đã được khởi tạo thành công!');
 
@@ -154,9 +152,11 @@ const getSchedulerStatus = () => {
     return {
         isRunning: true,
         stations: STATIONS,
-        schedule: '0 */3 * * *',
+        schedule: '0 * * * *',
         timezone: 'Asia/Ho_Chi_Minh',
-        description: 'Mỗi 3 giờ (0h, 3h, 6h, 9h, 12h, 15h, 18h, 21h) GMT+7'
+        description: 'Mỗi 1 giờ GMT+7 - gọi trực tiếp fetchAllStationsData(force=true)',
+        method: 'Direct function call',
+        force: true
     };
 };
 

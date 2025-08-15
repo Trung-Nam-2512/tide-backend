@@ -12,12 +12,12 @@ module.exports = {
         max_memory_restart: '1G',
         env: {
             NODE_ENV: 'development',
-            PORT: 1423,
+            PORT: process.env.PORT,
             MONGO_URI: process.env.MONGO_URI
         },
         env_production: {
             NODE_ENV: 'production',
-            PORT: 1423,
+            PORT: process.env.PORT,
             MONGO_URI: process.env.MONGO_URI
         },
         error_file: './logs/err.log',

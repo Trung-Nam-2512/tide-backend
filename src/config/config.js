@@ -5,7 +5,13 @@ const config = {
     api: {
         tide: {
             apiUrl_forecast: process.env.API_URL_FORECAST || 'https://marinemekong.com/admin/api/station_get',
-        }
+        },
+        tide_ho_dau_tien: {
+            apiUrl_forecast: process.env.API_URL_HODAUTIENG || 'https://hodautieng.vn/jaxrs/QuanTracHoChua/getDataQuanTracTB',
+        },
+        tide_ho_dau_tien_QXA: {
+            apiUrl_forecast: process.env.API_URL_HODAUTIENG_QXA || 'https://hodautieng.vn/jaxrs/QuanTracHoChua/getDataQuanTrac',
+        },
     }
 }
 

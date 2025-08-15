@@ -4,6 +4,8 @@ const config = require('../config/config');
 const Tide = require('../models/tideModel');
 const TideRealy = require('../models/tideRealyModel');
 const { parseDateString, parseRawData, convertApiData, removeDuplicateData } = require('../utils/helpers');
+const DatabaseUtils = require('../utils/databaseUtils');
+const DataProcessingUtils = require('../utils/dataProcessingUtils');
 const API_URL_TiDE_REALY = process.env.API_URL_TiDE_REALY;
 
 // Cache để lưu thời gian gọi API cuối cùng cho mỗi trạm
@@ -133,91 +135,106 @@ const callExternalAPI = async (stationCode) => {
 };
 
 
-// Hàm kiểm tra và lọc dữ liệu trùng lặp trước khi lưu (tối ưu hóa)
-const filterAndMergeData = async (stationCode, newData) => {
-    try {
-        // Giới hạn số lượng records để tránh treo
-        const maxRecords = 50; // Giảm xuống 50 records
-        if (newData.length > maxRecords) {
-            console.log(`⚠️ Dữ liệu quá nhiều (${newData.length}), chỉ xử lý ${maxRecords} records đầu tiên`);
-            newData = newData.slice(0, maxRecords);
-        }
-
-        // Lấy dữ liệu hiện có trong DB (giới hạn 50 records)
-        const existingData = await TideRealy.getLatestData(stationCode, 50);
-
-        // Tạo map để kiểm tra trùng lặp
-        const existingTimestamps = new Set();
-        existingData.forEach(item => {
-            if (item.timestamp) {
-                existingTimestamps.add(item.timestamp.getTime());
-            }
-        });
-
-        // Lọc dữ liệu mới, chỉ giữ lại những dữ liệu chưa có
-        const uniqueNewData = newData.filter(item => {
-            if (!item.Timestamp) return false;
-            const timestamp = new Date(item.Timestamp).getTime();
-            return !existingTimestamps.has(timestamp);
-        });
-
-        console.log(`📊 Dữ liệu mới: ${newData.length} records`);
-        console.log(`📊 Dữ liệu trùng lặp: ${newData.length - uniqueNewData.length} records`);
-        console.log(`📊 Dữ liệu unique: ${uniqueNewData.length} records`);
-
-        return uniqueNewData;
-    } catch (error) {
-        console.error('Error filtering data:', error.message);
-        // Nếu lỗi, trả về dữ liệu gốc (giới hạn)
-        return newData.slice(0, 25);
+/**
+ * Process and format tide realy data for database storage
+ * @param {Array} rawData - Raw API data
+ * @param {string} stationCode - Station code
+ * @returns {Array} Processed data ready for database
+ */
+const processTideRealyData = (rawData, stationCode) => {
+    if (!Array.isArray(rawData) || rawData.length === 0) {
+        console.warn('Invalid or empty tide realy data');
+        return [];
     }
+
+    const processedData = rawData
+        .map(item => {
+            try {
+                // Trừ đi 288.5 cho Vũng Tàu để đảm bảo độ chính xác
+                let adjustedWaterLevel = item.GiaTri;
+                if (stationCode === '4EC7BBAF-44E7-4DFA-BAED-4FB1217FBDA8') { // Vũng Tàu
+                    adjustedWaterLevel = item.GiaTri - 288.5;
+                    console.log(`🔧 Điều chỉnh giá trị Vũng Tàu: ${item.GiaTri} -> ${adjustedWaterLevel} (trừ 288.5)`);
+                }
+
+                return {
+                    stationCode: stationCode,
+                    timestamp: item.Timestamp,
+                    utc: new Date(item.UTC),
+                    vietnamTime: item.GioVietNam,
+                    waterLevel: adjustedWaterLevel,
+                    unit: 'cm',
+                    dataType: 'real',
+                    status: 'active'
+                };
+            } catch (error) {
+                console.warn('Failed to process tide realy item:', item, error.message);
+                return null;
+            }
+        })
+        .filter(item => item !== null); // Remove invalid items
+
+    console.log(`📊 Processed ${processedData.length} tide realy records from ${rawData.length} raw records`);
+    return processedData;
 };
 
 const getTideRealyForce = async (stationCode) => {
     try {
         console.log(`🔄 Force refresh cho trạm: ${stationCode}`);
 
-        // Gọi API với timeout
-        const data = await callExternalAPI(stationCode);
+        // Step 1: Call external API
+        const rawData = await callExternalAPI(stationCode);
 
-        if (!data || !Array.isArray(data)) {
-            throw new Error('Invalid API response format');
+        if (!rawData || !Array.isArray(rawData)) {
+            return DataProcessingUtils.createOperationResult({
+                success: false,
+                message: 'No valid data received from API',
+                operation: 'fetch_and_save_tide_realy'
+            });
         }
 
-        console.log(`📊 API trả về ${data.length} records`);
+        console.log(`📊 API trả về ${rawData.length} records`);
 
-        const convertedData = convertApiData(data);
+        // Step 2: Convert and remove duplicates from API data
+        const convertedData = convertApiData(rawData);
         const uniqueData = removeDuplicateData(convertedData);
         console.log(`📊 Sau khi lọc trùng lặp: ${uniqueData.length} records`);
 
-        // Lọc và lưu dữ liệu vào MongoDB
-        const filteredData = await filterAndMergeData(stationCode, uniqueData);
-        if (filteredData.length > 0) {
-            await saveTideRealyData(stationCode, filteredData);
+        // Step 3: Process data for database
+        const processedData = processTideRealyData(uniqueData, stationCode);
+
+        if (processedData.length === 0) {
+            return DataProcessingUtils.createOperationResult({
+                success: false,
+                message: 'No valid processed data',
+                operation: 'fetch_and_save_tide_realy'
+            });
         }
+
+        // Step 4: Complete data replacement (like Ho Dau Tieng services)
+        const dbResult = await DatabaseUtils.replaceAllData(TideRealy, processedData);
 
         // Cập nhật thời gian gọi API và reset error count
         updateAPICallTime(stationCode);
-        console.log(`✅ Đã force refresh cho trạm: ${stationCode}`);
+        console.log(`✅ Đã force refresh và thay thế toàn bộ dữ liệu cho trạm: ${stationCode}`);
 
-        return {
-            data: uniqueData,
-            source: 'force_refresh',
-            lastUpdate: getCurrentVietnamTime().toISOString(),
-            newRecords: filteredData.length
-        };
+        return DataProcessingUtils.createOperationResult({
+            success: true,
+            message: `All tide realy data completely replaced with fresh API data for station ${stationCode}`,
+            operation: 'fetch_and_save_tide_realy',
+            inserted: dbResult.newRecords,
+            deleted: dbResult.oldRecords,
+            newRecords: dbResult.newRecords,
+            dataRange: `${processedData.length} records processed`,
+            rawData: uniqueData
+        });
+
     } catch (error) {
         console.error('Error in getTideRealyForce:', error.message);
         // Tăng error count
         updateErrorCount(stationCode);
 
-        return {
-            data: [],
-            source: 'error',
-            error: error.message,
-            lastUpdate: getCurrentVietnamTime().toISOString(),
-            newRecords: 0
-        };
+        throw new Error(`Failed to fetch or save tide realy data: ${error.message}`);
     }
 }
 
@@ -242,34 +259,39 @@ const getTideRealy = async (stationCode) => {
 
         console.log(`🔄 Cần gọi API mới cho trạm: ${stationCode}`);
 
-        // Gọi API với timeout
-        const data = await callExternalAPI(stationCode);
+        // Step 1: Call external API
+        const rawData = await callExternalAPI(stationCode);
 
-        if (!data || !Array.isArray(data)) {
+        if (!rawData || !Array.isArray(rawData)) {
             throw new Error('Invalid API response format');
         }
 
-        console.log(`📊 API trả về ${data.length} records`);
+        console.log(`📊 API trả về ${rawData.length} records`);
 
-        const convertedData = convertApiData(data);
+        // Step 2: Convert and remove duplicates from API data
+        const convertedData = convertApiData(rawData);
         const uniqueData = removeDuplicateData(convertedData);
         console.log(`📊 Sau khi lọc trùng lặp: ${uniqueData.length} records`);
 
-        // Lọc và lưu dữ liệu vào MongoDB
-        const filteredData = await filterAndMergeData(stationCode, uniqueData);
-        if (filteredData.length > 0) {
-            await saveTideRealyData(stationCode, filteredData);
+        // Step 3: Process data for database
+        const processedData = processTideRealyData(uniqueData, stationCode);
+
+        if (processedData.length === 0) {
+            console.warn(`⚠️ Không có dữ liệu hợp lệ để lưu cho trạm: ${stationCode}`);
+        } else {
+            // Step 4: Complete data replacement (like Ho Dau Tieng services)
+            await DatabaseUtils.replaceAllData(TideRealy, processedData);
+            console.log(`✅ Đã thay thế toàn bộ dữ liệu cho trạm: ${stationCode}`);
         }
 
         // Cập nhật thời gian gọi API và reset error count
         updateAPICallTime(stationCode);
-        console.log(`✅ Đã cập nhật cache cho trạm: ${stationCode}`);
 
         return {
             data: uniqueData,
             source: 'api',
             lastUpdate: getCurrentVietnamTime().toISOString(),
-            newRecords: filteredData.length
+            newRecords: processedData.length
         };
     } catch (error) {
         console.error('Error in getTideRealy:', error.message);
@@ -299,41 +321,13 @@ const getTideRealy = async (stationCode) => {
     }
 }
 
+/**
+ * Legacy function - now replaced by complete data replacement strategy
+ * Keeping for backward compatibility but not actively used
+ */
 const saveTideRealyData = async (stationCode, data) => {
-    try {
-        // Giới hạn số lượng records để tránh treo
-        const maxRecords = 100; // Giảm xuống 100 records
-        const dataToSave = data.slice(0, maxRecords);
-
-        const savePromises = dataToSave.map(item => {
-            // Trừ đi 288.5 cho Vũng Tàu để đảm bảo độ chính xác
-            let adjustedWaterLevel = item.GiaTri;
-            if (stationCode === '4EC7BBAF-44E7-4DFA-BAED-4FB1217FBDA8') { // Vũng Tàu
-                adjustedWaterLevel = item.GiaTri - 288.5;
-                console.log(`🔧 Điều chỉnh giá trị Vũng Tàu: ${item.GiaTri} -> ${adjustedWaterLevel} (trừ 288.5)`);
-            }
-
-            const dbData = {
-                stationCode: stationCode,
-                timestamp: item.Timestamp,
-                utc: new Date(item.UTC),
-                vietnamTime: item.GioVietNam,
-                waterLevel: adjustedWaterLevel, // Sử dụng giá trị đã điều chỉnh
-                unit: 'cm',
-                dataType: 'real',
-                status: 'active'
-            };
-
-            return TideRealy.upsertData(dbData);
-        });
-
-        await Promise.all(savePromises);
-        console.log(`✅ Đã lưu ${dataToSave.length} records mới cho trạm ${stationCode}`);
-
-    } catch (error) {
-        console.error('Error saving tide realy data:', error.message);
-        // Không throw error để tránh treo API
-    }
+    console.warn('⚠️ saveTideRealyData is deprecated. Use complete replacement strategy instead.');
+    // This function is now replaced by DatabaseUtils.replaceAllData() in the main flow
 }
 
 const getTideRealyFromDB = async (stationCode, limit = 100) => {
