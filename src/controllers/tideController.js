@@ -358,22 +358,22 @@ const getCombinedTideData = async (req, res) => {
             }
         } else {
             console.warn('⚠️ No stationCode available, trying to fetch from VUNGTAU stationCode...');
-            // Fallback: Try with VUNGTAU stationCode
-            const vungtauStationCode = '4EC7BBAF-44E7-4DFA-BAED-4FB1217FBDA8';
-            try {
-                console.log(`📊 Trying fallback fetch with VUNGTAU stationCode: ${vungtauStationCode}`);
-                realData = await getTideRealyFromDB(vungtauStationCode, 200);
-                console.log(`📊 Found ${realData.length} real tide records with fallback stationCode`);
-                if (realData.length > 0) {
-                    const firstRecord = realData[0];
-                    const lastRecord = realData[realData.length - 1];
-                    console.log(`🕐 Fallback real data time range: ${firstRecord.GioVietNam} to ${lastRecord.GioVietNam}`);
-                    console.log(`🕐 Fallback sample record:`, firstRecord);
-                }
-                stationCode = vungtauStationCode; // Update stationCode for response
-            } catch (error) {
-                console.error('❌ Error fetching real data with fallback:', error.message);
-            }
+            // Fallback: Try with VUNGTAU stationCode ( fallback ngu =)))
+            // const vungtauStationCode = '4EC7BBAF-44E7-4DFA-BAED-4FB1217FBDA8';
+            // try {
+            //     console.log(`📊 Trying fallback fetch with VUNGTAU stationCode: ${vungtauStationCode}`);
+            //     realData = await getTideRealyFromDB(vungtauStationCode, 200);
+            //     console.log(`📊 Found ${realData.length} real tide records with fallback stationCode`);
+            //     if (realData.length > 0) {
+            //         const firstRecord = realData[0];
+            //         const lastRecord = realData[realData.length - 1];
+            //         console.log(`🕐 Fallback real data time range: ${firstRecord.GioVietNam} to ${lastRecord.GioVietNam}`);
+            //         console.log(`🕐 Fallback sample record:`, firstRecord);
+            //     }
+            //     stationCode = vungtauStationCode; // Update stationCode for response
+            // } catch (error) {
+            //     console.error('❌ Error fetching real data with fallback:', error.message);
+            // }
         }
 
         // Chuyển đổi dữ liệu thực đo sang format tương thích

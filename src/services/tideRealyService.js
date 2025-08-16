@@ -21,61 +21,9 @@ const getCurrentVietnamTime = () => {
 };
 
 // Hàm kiểm tra xem có phải giờ gọi API không (mỗi 3 giờ)
-const isScheduledAPITime = () => {
-    const now = getCurrentVietnamTime();
-    const hour = now.getHours();
-    const minute = now.getMinutes();
-
-    // Chỉ gọi API vào các giờ chia hết cho 3 (với độ lệch ±5 phút)
-    const isScheduledHour = hour % 3 === 0;
-    const isWithinTimeWindow = minute >= 0 && minute <= 5; // Cho phép độ lệch 5 phút
-
-    return isScheduledHour && isWithinTimeWindow;
-};
 
 // Hàm kiểm tra xem có cần gọi API không (cải thiện)
-const shouldCallAPI = async (stationCode) => {
-    const now = getCurrentVietnamTime();
-    const lastCallTime = apiCallCache.get(stationCode);
-    const errorCount = errorCountCache.get(stationCode) || 0;
 
-    // Nếu có quá nhiều lỗi liên tiếp (>3), tăng thời gian chờ
-    if (errorCount > 3) {
-        console.log(`⚠️ Trạm ${stationCode} có ${errorCount} lỗi liên tiếp, tăng thời gian chờ`);
-        if (lastCallTime) {
-            const timeDiff = now.getTime() - lastCallTime.getTime();
-            const extendedWaitTime = 12 * 60 * 60 * 1000; // 12 giờ
-            if (timeDiff < extendedWaitTime) {
-                console.log(`📊 Chờ thêm ${Math.round((extendedWaitTime - timeDiff) / (60 * 1000))} phút do lỗi liên tiếp`);
-                return false;
-            }
-        }
-    }
-
-    // Nếu chưa có cache, cần gọi API
-    if (!lastCallTime) {
-        console.log(`📊 Chưa có cache cho trạm ${stationCode}, cần gọi API`);
-        return true;
-    }
-
-    // Kiểm tra xem có phải giờ gọi API không
-    if (isScheduledAPITime()) {
-        const timeDiff = now.getTime() - lastCallTime.getTime();
-        const minIntervalMs = 6 * 60 * 60 * 1000; // Tối thiểu 6 giờ giữa các lần gọi
-
-        if (timeDiff >= minIntervalMs) {
-            console.log(`📊 Đã đến giờ gọi API (${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}), cần gọi API`);
-            return true;
-        } else {
-            console.log(`📊 Chưa đủ thời gian giữa các lần gọi (${Math.round(timeDiff / (60 * 1000))} phút)`);
-            return false;
-        }
-    }
-
-    // Nếu không phải giờ gọi API, sử dụng cache
-    console.log(`📊 Không phải giờ gọi API, sử dụng cache`);
-    return false;
-};
 
 // Hàm cập nhật thời gian gọi API
 const updateAPICallTime = (stationCode) => {

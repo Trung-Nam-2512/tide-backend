@@ -6,7 +6,14 @@ const { getSchedulerStatus, fetchAllStationsData } = require('../scheduler/tideD
 const tideHoDauTiengController = require('../controllers/tideHoDauTieng');
 const qdenHoDauTiengController = require('../controllers/qdenHoDauTiengController');
 const luuluongxaController = require('../controllers/luuluongxaController');
+const mekongController = require('../controllers/mekongController');
 const { fetchHoDauTiengDataNow, getHoDauTiengSchedulerStatus } = require('../scheduler/hodautiengScheduler');
+const {
+    fetchMekongDataNow,
+    getMekongSchedulerStatus,
+    getMekongSchedulerStats,
+    checkMekongSchedulerHealth
+} = require('../scheduler/mekongScheduler');
 // API v1 routes
 router.get('/fetch-tide-forecast-data', tideController.triggerFetchTideData); // lấy dữ liệu từ api
 router.get('/get-tide-forecast-data', tideController.getTideData);// lấy dữ liệu từ database
@@ -32,6 +39,15 @@ router.post('/fetch-qden-data', qdenHoDauTiengController.fetchAndSaveQden); // f
 // luuluongxa - discharge flow data
 router.get('/get-luuluongxa-data', luuluongxaController.getLuuluongxaData); // lấy dữ liệu lưu lượng xả
 router.post('/fetch-luuluongxa-data', luuluongxaController.fetchAndSaveLuuluongxa); // fetch và replace toàn bộ dữ liệu mới
+
+// mekong - water level data from Mekong API
+router.get('/get-mekong-data', mekongController.getMekongDataController); // lấy dữ liệu Mekong từ database
+router.post('/fetch-mekong-data', mekongController.fetchMekongData); // fetch và lưu dữ liệu từ Mekong API
+router.get('/get-recent-mekong-data', mekongController.getRecentMekongDataController); // lấy dữ liệu Mekong gần nhất
+router.get('/get-mekong-stats', mekongController.getMekongStatsController); // lấy thống kê dữ liệu Mekong
+router.get('/get-mekong-data-by-color', mekongController.getMekongDataByColor); // lấy dữ liệu theo màu sắc
+router.get('/mekong-health', mekongController.mekongHealthCheck); // kiểm tra tình trạng Mekong service
+router.delete('/clear-mekong-data', mekongController.clearMekongData); // xóa toàn bộ dữ liệu Mekong (admin only)
 
 
 
@@ -131,6 +147,80 @@ router.post('/scheduler/hodautieng/fetch-now', async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Manual HoDauTieng fetch failed',
+            error: error.message,
+            timestamp: new Date().toISOString()
+        });
+    }
+});
+
+// Mekong scheduler status và manual trigger
+router.get('/scheduler/mekong/status', (req, res) => {
+    try {
+        const status = getMekongSchedulerStatus();
+        res.json({
+            success: true,
+            data: status,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: 'Failed to get Mekong scheduler status',
+            message: error.message,
+            timestamp: new Date().toISOString()
+        });
+    }
+});
+
+router.post('/scheduler/mekong/fetch-now', async (req, res) => {
+    try {
+        const results = await fetchMekongDataNow();
+        res.json({
+            success: true,
+            message: 'Manual Mekong fetch completed',
+            ...results
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Manual Mekong fetch failed',
+            error: error.message,
+            timestamp: new Date().toISOString()
+        });
+    }
+});
+
+router.get('/scheduler/mekong/stats', async (req, res) => {
+    try {
+        const stats = await getMekongSchedulerStats();
+        res.json({
+            success: true,
+            message: 'Mekong scheduler stats retrieved',
+            ...stats
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Failed to get Mekong scheduler stats',
+            error: error.message,
+            timestamp: new Date().toISOString()
+        });
+    }
+});
+
+router.get('/scheduler/mekong/health', async (req, res) => {
+    try {
+        const health = await checkMekongSchedulerHealth();
+        const statusCode = health.success ? 200 : 503;
+        res.status(statusCode).json({
+            success: health.success,
+            message: 'Mekong scheduler health check completed',
+            ...health
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Mekong scheduler health check failed',
             error: error.message,
             timestamp: new Date().toISOString()
         });

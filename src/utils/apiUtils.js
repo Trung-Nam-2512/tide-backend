@@ -166,6 +166,126 @@ class ApiUtils {
             (rawData.dtData && Array.isArray(rawData.dtData) && rawData.dtData.length > 0)
         );
     }
+
+    /**
+     * Make API call to Mekong service with retry mechanism
+     * @param {string} apiUrl - API endpoint URL
+     * @param {number} maxRetries - Maximum number of retries (default: 3)
+     * @param {number} timeout - Timeout in milliseconds (default: 30000)
+     * @returns {Promise<Array>} API response data
+     */
+    static async callMekongApi(apiUrl, maxRetries = 3, timeout = 30000) {
+        let lastError;
+
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                console.log(`📡 Calling Mekong API... (Attempt ${attempt}/${maxRetries})`);
+                console.log(`🔗 API URL: ${apiUrl}`);
+
+                const response = await axios.get(apiUrl, {
+                    headers: {
+                        'User-Agent': 'Hydrology-Dashboard/1.0',
+                        'Accept': 'application/json'
+                    },
+                    timeout: timeout
+                });
+
+                console.log(`✅ Mekong API call successful on attempt ${attempt}`);
+                console.log(`📋 Response status: ${response.status}`);
+
+                return response.data;
+
+            } catch (error) {
+                lastError = error;
+                console.error(`❌ Mekong API call failed on attempt ${attempt}/${maxRetries}:`, error.message);
+
+                if (error.response) {
+                    console.error('📋 Response status:', error.response.status);
+                    console.error('📋 Response data:', error.response.data);
+
+                    // Không retry cho lỗi client (4xx) trừ 408, 429
+                    const status = error.response.status;
+                    if (status >= 400 && status < 500 && status !== 408 && status !== 429) {
+                        console.error('🚫 Client error detected, skipping retries');
+                        break;
+                    }
+                }
+
+                // Đợi trước khi thử lại (exponential backoff)
+                if (attempt < maxRetries) {
+                    const delayMs = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
+                    console.log(`⏳ Waiting ${delayMs}ms before retry...`);
+                    await new Promise(resolve => setTimeout(resolve, delayMs));
+                }
+            }
+        }
+
+        // Tất cả attempts đều thất bại
+        console.error(`❌ All ${maxRetries} attempts failed for Mekong API`);
+
+        if (lastError.response) {
+            throw new Error(`Mekong API Error: ${lastError.response.status} - ${lastError.response.statusText}`);
+        } else if (lastError.request) {
+            throw new Error('Mekong API Error: No response received from server after all retries');
+        } else {
+            throw new Error(`Mekong API Error: ${lastError.message}`);
+        }
+    }
+
+    /**
+     * Parse Mekong API string response to array
+     * @param {string} rawData - Raw API response string
+     * @returns {Array} Parsed array
+     */
+    static parseMekongApiResponse(rawData) {
+        if (typeof rawData !== 'string') {
+            console.warn('⚠️ Mekong API response is not a string');
+            return null;
+        }
+
+        try {
+            // Trim whitespace and extract the array part
+            const trimmed = rawData.trim();
+
+            // Find the array part (starts with [ and ends with ])
+            const startIndex = trimmed.indexOf('[');
+            const endIndex = trimmed.lastIndexOf(']');
+
+            if (startIndex === -1 || endIndex === -1) {
+                console.error('❌ No array found in response');
+                return null;
+            }
+
+            let arrayString = trimmed.substring(startIndex, endIndex + 1);
+
+            // Remove trailing comma if exists (before the closing bracket)
+            arrayString = arrayString.replace(/,\s*]$/, ']');
+
+            // Convert JavaScript object notation to JSON
+            // Replace unquoted keys with quoted keys
+            arrayString = arrayString.replace(/(\w+):/g, '"$1":');
+
+            console.log('🔄 Parsing Mekong array string...');
+            const parsed = JSON.parse(arrayString);
+
+            console.log(`✅ Successfully parsed ${parsed.length} items from Mekong API`);
+            return parsed;
+
+        } catch (error) {
+            console.error('❌ Error parsing Mekong API response:', error.message);
+            console.error('📋 Raw data sample:', rawData.substring(0, 200));
+            return null;
+        }
+    }
+
+    /**
+     * Validate Mekong API response structure
+     * @param {Array} rawData - Raw API response
+     * @returns {boolean} True if response is valid
+     */
+    static validateMekongApiResponse(rawData) {
+        return rawData && Array.isArray(rawData) && rawData.length > 0;
+    }
 }
 
 module.exports = ApiUtils;

@@ -252,6 +252,107 @@ class DataProcessingUtils {
             timestamp: new Date().toISOString()
         };
     }
+
+    /**
+     * Transform Mekong API response to database format
+     * @param {Array} rawData - Raw data từ API
+     * @param {string} stationCode - Station code (CDO/TCH)
+     * @param {string} stationName - Station name (ChauDoc/TanChau)
+     * @returns {Array} Processed data
+     */
+    static processMekongData(rawData, stationCode, stationName) {
+        try {
+            console.log(`🔄 Processing Mekong data for station: ${stationName} (${stationCode})`);
+
+            const processedData = rawData.map((item, index) => {
+                // Validate required fields
+                if (!item.date_gmt || item.val === undefined || item.val === null) {
+                    console.warn(`⚠️ Skipping invalid item at index ${index}:`, item);
+                    return null;
+                }
+
+                // Parse date
+                let parsedDate;
+                try {
+                    parsedDate = new Date(item.date_gmt);
+                    if (isNaN(parsedDate.getTime())) {
+                        throw new Error(`Invalid date: ${item.date_gmt}`);
+                    }
+                } catch (dateError) {
+                    console.warn(`⚠️ Skipping item with invalid date at index ${index}:`, item);
+                    return null;
+                }
+
+                // Process item with station identification
+                const processedItem = {
+                    date_gmt: parsedDate,
+                    val: parseFloat(item.val),
+                    lineColor: item.lineColor || '#0066FF',
+                    stationCode: stationCode,
+                    stationName: stationName,
+                    dataType: 'mekong',
+                    source: 'mekong_api'
+                };
+
+                // Add optional fields if they exist
+                if (item.ft !== undefined && item.ft !== null) {
+                    processedItem.ft = parseFloat(item.ft);
+                }
+                if (item.as !== undefined && item.as !== null) {
+                    processedItem.as = parseFloat(item.as);
+                }
+                if (item.av !== undefined && item.av !== null) {
+                    processedItem.av = parseFloat(item.av);
+                }
+                if (item.P !== undefined && item.P !== null) {
+                    processedItem.P = parseFloat(item.P);
+                }
+
+                return processedItem;
+            }).filter(item => item !== null); // Remove null items
+
+            console.log(`✅ Processed ${processedData.length} valid items for ${stationName} out of ${rawData.length} total`);
+
+            // Sort by date
+            processedData.sort((a, b) => a.date_gmt - b.date_gmt);
+
+            return processedData;
+
+        } catch (error) {
+            console.error(`❌ Error processing Mekong data for ${stationName}:`, error.message);
+            throw error;
+        }
+    }
+
+    /**
+     * Validate processed Mekong data
+     * @param {Array} processedData - Processed data
+     * @returns {boolean} True if data is valid
+     */
+    static validateMekongData(processedData) {
+        if (!Array.isArray(processedData)) {
+            console.error('❌ Processed data is not an array');
+            return false;
+        }
+
+        if (processedData.length === 0) {
+            console.error('❌ No valid data after processing');
+            return false;
+        }
+
+        // Kiểm tra sample items
+        const sampleSize = Math.min(5, processedData.length);
+        for (let i = 0; i < sampleSize; i++) {
+            const item = processedData[i];
+            if (!item.date_gmt || item.val === undefined || item.val === null) {
+                console.error(`❌ Invalid item at index ${i}:`, item);
+                return false;
+            }
+        }
+
+        console.log(`✅ Validation passed for ${processedData.length} items`);
+        return true;
+    }
 }
 
 module.exports = DataProcessingUtils;

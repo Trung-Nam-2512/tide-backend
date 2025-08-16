@@ -12,6 +12,10 @@ const config = {
         tide_ho_dau_tien_QXA: {
             apiUrl_forecast: process.env.API_URL_HODAUTIENG_QXA || 'https://hodautieng.vn/jaxrs/QuanTracHoChua/getDataQuanTrac',
         },
+        mekong: {
+            apiUrl_ChauDoc: process.env.API_URL_FORECAST_CHAUDOC || 'https://ffw.mrcmekong.org/fetch_stforecast.php?StCode=CDO',
+            apiUrl_Tanchau: process.env.API_URL_FORECAST_TANCHAU || 'https://ffw.mrcmekong.org/fetch_stforecast.php?StCode=TCH',
+        },
     }
 }
 
