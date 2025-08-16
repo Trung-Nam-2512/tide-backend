@@ -104,6 +104,10 @@ const processTideRealyData = (rawData, stationCode) => {
                     adjustedWaterLevel = item.GiaTri - 288.5;
                     console.log(`🔧 Điều chỉnh giá trị Vũng Tàu: ${item.GiaTri} -> ${adjustedWaterLevel} (trừ 288.5)`);
                 }
+                // else if (stationCode === 'CDO') {
+                //     adjustedWaterLevel = item.GiaTri - 288.5;
+                //     console.log(`🔧 Điều chỉnh giá trị Vũng Tàu: ${item.GiaTri} -> ${adjustedWaterLevel} (trừ 288.5)`);
+                // }
 
                 return {
                     stationCode: stationCode,
@@ -217,102 +221,30 @@ const getTideRealy = async (stationCode) => {
         console.log(`⏰ Thời gian hiện tại (GMT+7): ${getCurrentVietnamTime().toISOString()}`);
 
         //  Kiểm tra xem có cần gọi API không
-        if (!(await shouldCallAPI(stationCode))) {
-            const lastCallTime = apiCallCache.get(stationCode);
-            console.log(`📦 Sử dụng cache - Lần gọi API cuối: ${lastCallTime?.toISOString()}`);
+        const lastCallTime = apiCallCache.get(stationCode);
 
-            // Lấy dữ liệu từ database thay vì gọi API
-            const cachedData = await getTideRealyFromDB(stationCode, 100);
-            return {
-                data: cachedData,
-                source: 'cache',
-                lastUpdate: lastCallTime?.toISOString() || 'unknown',
-                totalRecords: cachedData.length
-            };
-        }
-
-        console.log(`🔄 Cần gọi API mới cho trạm: ${stationCode}`);
-
-        // Step 1: Call external API
-        const rawData = await callExternalAPI(stationCode);
-
-        if (!rawData || !Array.isArray(rawData)) {
-            throw new Error('Invalid API response format');
-        }
-
-        console.log(`📊 API trả về ${rawData.length} records`);
-
-        // Step 2: Convert and remove duplicates from API data
-        const convertedData = convertApiData(rawData);
-        const uniqueData = removeDuplicateData(convertedData);
-        console.log(`📊 Sau khi lọc trùng lặp: ${uniqueData.length} records`);
-
-        // Step 3: Process data for database
-        const processedData = processTideRealyData(uniqueData, stationCode);
-
-        if (processedData.length === 0) {
-            console.warn(`⚠️ Không có dữ liệu hợp lệ để lưu cho trạm: ${stationCode}`);
-        } else {
-            // Validate processed data before database operation
-            const validData = processedData.filter(item => {
-                return item &&
-                    item.stationCode &&
-                    item.timestamp &&
-                    item.utc &&
-                    typeof item.waterLevel === 'number' &&
-                    !isNaN(item.waterLevel);
-            });
-
-            if (validData.length !== processedData.length) {
-                console.warn(`⚠️ Filtered out ${processedData.length - validData.length} invalid records`);
-            }
-
-            if (validData.length > 0) {
-                // Step 4: SAFE station-specific data replacement
-                await DatabaseUtils.replaceStationData(TideRealy, stationCode, validData);
-                console.log(`✅ Đã thay thế dữ liệu cho trạm: ${stationCode} (station-specific)`);
-            } else {
-                console.warn(`⚠️ Không có dữ liệu hợp lệ sau khi validation cho trạm: ${stationCode}`);
-            }
-        }
-
-        // Cập nhật thời gian gọi API và reset error count
-        updateAPICallTime(stationCode);
-
+        // Lấy dữ liệu từ database thay vì gọi API
+        const cachedData = await getTideRealyFromDB(stationCode, 100);
         return {
-            data: uniqueData,
-            source: 'api',
-            lastUpdate: getCurrentVietnamTime().toISOString(),
-            newRecords: processedData.length,
-            totalRecords: uniqueData.length
+            data: cachedData,
+            source: 'cache',
+            lastUpdate: lastCallTime?.toISOString() || 'unknown',
+            totalRecords: cachedData.length
         };
+
     } catch (error) {
         console.error('Error in getTideRealy:', error.message);
 
         // Tăng error count
         updateErrorCount(stationCode);
+        return {
+            data: [],
+            source: 'error',
+            error: error.message,
+            totalRecords: 0,
+            lastUpdate: getCurrentVietnamTime().toISOString()
+        };
 
-        // Nếu gọi API lỗi, thử lấy từ cache
-        try {
-            console.log(`🔄 API lỗi, thử lấy từ cache...`);
-            const cachedData = await getTideRealyFromDB(stationCode, 50);
-            return {
-                data: cachedData,
-                source: 'cache_fallback',
-                lastUpdate: apiCallCache.get(stationCode)?.toISOString() || 'unknown',
-                totalRecords: cachedData.length,
-                error: error.message
-            };
-        } catch (cacheError) {
-            console.error('Error getting from cache:', cacheError.message);
-            return {
-                data: [],
-                source: 'error',
-                error: error.message,
-                totalRecords: 0,
-                lastUpdate: getCurrentVietnamTime().toISOString()
-            };
-        }
     }
 }
 
@@ -320,10 +252,7 @@ const getTideRealy = async (stationCode) => {
  * Legacy function - now replaced by complete data replacement strategy
  * Keeping for backward compatibility but not actively used
  */
-const saveTideRealyData = async (stationCode, data) => {
-    console.warn('⚠️ saveTideRealyData is deprecated. Use complete replacement strategy instead.');
-    // This function is now replaced by DatabaseUtils.replaceAllData() in the main flow
-}
+
 
 const getTideRealyFromDB = async (stationCode, limit = 100) => {
     try {
@@ -364,14 +293,12 @@ const getCacheStatus = () => {
 
     for (const [stationCode, lastCallTime] of apiCallCache.entries()) {
         const timeDiff = now.getTime() - lastCallTime.getTime();
-        const nextScheduledTime = getNextScheduledTime(lastCallTime);
         const isScheduled = isScheduledAPITime();
         const errorCount = errorCountCache.get(stationCode) || 0;
 
         status[stationCode] = {
             lastCallTime: lastCallTime.toISOString(),
             timeSinceLastCall: `${Math.round(timeDiff / (60 * 1000))} minutes`,
-            nextScheduledCall: nextScheduledTime.toISOString(),
             isScheduledTime: isScheduled,
             shouldCallAPI: isScheduled && timeDiff >= 6 * 60 * 60 * 1000,
             errorCount: errorCount,
@@ -383,25 +310,7 @@ const getCacheStatus = () => {
 };
 
 // Hàm tính thời gian gọi API tiếp theo (mỗi 3 giờ)
-const getNextScheduledTime = (lastCallTime) => {
-    const now = getCurrentVietnamTime();
-    const currentHour = now.getHours();
 
-    // Tính giờ tiếp theo chia hết cho 3
-    let nextHour = Math.ceil(currentHour / 3) * 3;
-
-    // Nếu giờ tiếp theo vượt quá 24, reset về 0 giờ ngày hôm sau
-    if (nextHour >= 24) {
-        const tomorrow = new Date(now);
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        tomorrow.setHours(0, 0, 0, 0);
-        return tomorrow;
-    }
-
-    const nextTime = new Date(now);
-    nextTime.setHours(nextHour, 0, 0, 0);
-    return nextTime;
-};
 
 // hàm cập nhật stationcode vào tideModel
 // hàm nhận vào 2 thao số : location và stationCode , nếu location có trong tideModel thì cập nhật stationCode vào location đóq
