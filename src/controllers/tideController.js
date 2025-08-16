@@ -334,15 +334,45 @@ const getCombinedTideData = async (req, res) => {
         let stationCode = null;
         if (forecastData && forecastData.length > 0) {
             stationCode = forecastData[0].stationCode;
+            console.log(`🔍 Found stationCode from forecast data: ${stationCode}`);
+        } else {
+            console.warn('⚠️ No forecast data found, cannot determine stationCode');
         }
 
         let realData = [];
         if (stationCode) {
             try {
-                // Lấy dữ liệu thực đo trong database
-                realData = await getTideRealyFromDB(stationCode);
+                console.log(`📊 Fetching real tide data for station: ${stationCode}`);
+                // Lấy dữ liệu thực đo trong database với limit cao hơn
+                realData = await getTideRealyFromDB(stationCode, 200);
+                console.log(`📊 Found ${realData.length} real tide records in database`);
+                if (realData.length > 0) {
+                    const firstRecord = realData[0];
+                    const lastRecord = realData[realData.length - 1];
+                    console.log(`🕐 Real data time range: ${firstRecord.GioVietNam} to ${lastRecord.GioVietNam}`);
+                    console.log(`🕐 Sample record:`, firstRecord);
+                }
             } catch (error) {
+                console.error('❌ Error fetching real data:', error.message);
                 console.warn('⚠️ Could not fetch real data:', error.message);
+            }
+        } else {
+            console.warn('⚠️ No stationCode available, trying to fetch from VUNGTAU stationCode...');
+            // Fallback: Try with VUNGTAU stationCode
+            const vungtauStationCode = '4EC7BBAF-44E7-4DFA-BAED-4FB1217FBDA8';
+            try {
+                console.log(`📊 Trying fallback fetch with VUNGTAU stationCode: ${vungtauStationCode}`);
+                realData = await getTideRealyFromDB(vungtauStationCode, 200);
+                console.log(`📊 Found ${realData.length} real tide records with fallback stationCode`);
+                if (realData.length > 0) {
+                    const firstRecord = realData[0];
+                    const lastRecord = realData[realData.length - 1];
+                    console.log(`🕐 Fallback real data time range: ${firstRecord.GioVietNam} to ${lastRecord.GioVietNam}`);
+                    console.log(`🕐 Fallback sample record:`, firstRecord);
+                }
+                stationCode = vungtauStationCode; // Update stationCode for response
+            } catch (error) {
+                console.error('❌ Error fetching real data with fallback:', error.message);
             }
         }
 
@@ -357,6 +387,19 @@ const getCombinedTideData = async (req, res) => {
             vietnamTime: item.GioVietNam
         }));
 
+        // Check for duplicates in formatted real data
+        const realDataDuplicateCheck = new Map();
+        formattedRealData.forEach((item, index) => {
+            const key = `${item.date.getTime()}_${item.tide}`;
+            if (realDataDuplicateCheck.has(key)) {
+                console.warn(`⚠️ Duplicate real data point found: ${key} at index ${index}`);
+                console.warn(`Previous:`, realDataDuplicateCheck.get(key));
+                console.warn(`Current:`, item);
+            } else {
+                realDataDuplicateCheck.set(key, item);
+            }
+        });
+
         // Chuyển đổi dữ liệu dự báo sang format tương thích
         const formattedForecastData = forecastData.map(item => ({
             date: new Date(item.date),
@@ -367,6 +410,14 @@ const getCombinedTideData = async (req, res) => {
         }));
 
         console.log(`✅ Found ${formattedForecastData.length} forecast records and ${formattedRealData.length} real records`);
+
+        // Log sample real data for debugging
+        if (formattedRealData.length > 0) {
+            console.log(`🔍 Sample real data points:`);
+            formattedRealData.slice(0, 3).forEach((item, index) => {
+                console.log(`  ${index + 1}. ${item.vietnamTime} - ${item.tide}cm (timestamp: ${item.date.getTime()})`);
+            });
+        }
 
         res.status(200).json({
             success: true,

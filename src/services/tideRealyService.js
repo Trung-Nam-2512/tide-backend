@@ -211,8 +211,32 @@ const getTideRealyForce = async (stationCode) => {
             });
         }
 
-        // Step 4: Complete data replacement (like Ho Dau Tieng services)
-        const dbResult = await DatabaseUtils.replaceAllData(TideRealy, processedData);
+        // Validate processed data before database operation
+        const validData = processedData.filter(item => {
+            return item &&
+                item.stationCode &&
+                item.timestamp &&
+                item.utc &&
+                typeof item.waterLevel === 'number' &&
+                !isNaN(item.waterLevel);
+        });
+
+        if (validData.length !== processedData.length) {
+            console.warn(`⚠️ Filtered out ${processedData.length - validData.length} invalid records`);
+        }
+
+        if (validData.length === 0) {
+            return DataProcessingUtils.createOperationResult({
+                success: false,
+                message: 'No valid data after validation',
+                operation: 'fetch_and_save_tide_realy'
+            });
+        }
+
+        console.log(`📊 Processed data ready for database: ${validData.length} records (${processedData.length} total)`);
+
+        // Step 4: SAFE station-specific data replacement
+        const dbResult = await DatabaseUtils.replaceStationData(TideRealy, stationCode, validData);
 
         // Cập nhật thời gian gọi API và reset error count
         updateAPICallTime(stationCode);
@@ -225,6 +249,7 @@ const getTideRealyForce = async (stationCode) => {
             inserted: dbResult.newRecords,
             deleted: dbResult.oldRecords,
             newRecords: dbResult.newRecords,
+            totalRecords: dbResult.totalRecords || processedData.length,
             dataRange: `${processedData.length} records processed`,
             rawData: uniqueData
         });
@@ -253,7 +278,8 @@ const getTideRealy = async (stationCode) => {
             return {
                 data: cachedData,
                 source: 'cache',
-                lastUpdate: lastCallTime?.toISOString() || 'unknown'
+                lastUpdate: lastCallTime?.toISOString() || 'unknown',
+                totalRecords: cachedData.length
             };
         }
 
@@ -279,9 +305,27 @@ const getTideRealy = async (stationCode) => {
         if (processedData.length === 0) {
             console.warn(`⚠️ Không có dữ liệu hợp lệ để lưu cho trạm: ${stationCode}`);
         } else {
-            // Step 4: Complete data replacement (like Ho Dau Tieng services)
-            await DatabaseUtils.replaceAllData(TideRealy, processedData);
-            console.log(`✅ Đã thay thế toàn bộ dữ liệu cho trạm: ${stationCode}`);
+            // Validate processed data before database operation
+            const validData = processedData.filter(item => {
+                return item &&
+                    item.stationCode &&
+                    item.timestamp &&
+                    item.utc &&
+                    typeof item.waterLevel === 'number' &&
+                    !isNaN(item.waterLevel);
+            });
+
+            if (validData.length !== processedData.length) {
+                console.warn(`⚠️ Filtered out ${processedData.length - validData.length} invalid records`);
+            }
+
+            if (validData.length > 0) {
+                // Step 4: SAFE station-specific data replacement
+                await DatabaseUtils.replaceStationData(TideRealy, stationCode, validData);
+                console.log(`✅ Đã thay thế dữ liệu cho trạm: ${stationCode} (station-specific)`);
+            } else {
+                console.warn(`⚠️ Không có dữ liệu hợp lệ sau khi validation cho trạm: ${stationCode}`);
+            }
         }
 
         // Cập nhật thời gian gọi API và reset error count
@@ -291,7 +335,8 @@ const getTideRealy = async (stationCode) => {
             data: uniqueData,
             source: 'api',
             lastUpdate: getCurrentVietnamTime().toISOString(),
-            newRecords: processedData.length
+            newRecords: processedData.length,
+            totalRecords: uniqueData.length
         };
     } catch (error) {
         console.error('Error in getTideRealy:', error.message);
@@ -307,6 +352,7 @@ const getTideRealy = async (stationCode) => {
                 data: cachedData,
                 source: 'cache_fallback',
                 lastUpdate: apiCallCache.get(stationCode)?.toISOString() || 'unknown',
+                totalRecords: cachedData.length,
                 error: error.message
             };
         } catch (cacheError) {
@@ -315,6 +361,7 @@ const getTideRealy = async (stationCode) => {
                 data: [],
                 source: 'error',
                 error: error.message,
+                totalRecords: 0,
                 lastUpdate: getCurrentVietnamTime().toISOString()
             };
         }
@@ -333,13 +380,30 @@ const saveTideRealyData = async (stationCode, data) => {
 const getTideRealyFromDB = async (stationCode, limit = 100) => {
     try {
         const data = await TideRealy.getLatestData(stationCode, limit);
-        return data.map(item => ({
+
+        // Check for duplicates before mapping
+        const timestampMap = new Map();
+        data.forEach((item, index) => {
+            if (timestampMap.has(item.timestamp)) {
+                console.warn(`⚠️ Duplicate timestamp found in DB: ${item.timestamp} at index ${index}`);
+                console.warn(`Previous:`, timestampMap.get(item.timestamp));
+                console.warn(`Current:`, item);
+            } else {
+                timestampMap.set(item.timestamp, item);
+            }
+        });
+
+        const mappedData = data.map(item => ({
             Timestamp: item.timestamp,
             UTC: item.utc,
             GioVietNam: item.vietnamTime,
             GiaTri: item.waterLevel, // Dữ liệu đã được lưu trong DB dưới dạng cm
             unit: 'cm'
         }));
+
+        console.log(`📊 getTideRealyFromDB: Retrieved ${data.length} records, mapped to ${mappedData.length} records`);
+
+        return mappedData;
     } catch (error) {
         console.error('Error getting tide realy data from DB:', error.message);
         return []; // Trả về array rỗng thay vì throw error

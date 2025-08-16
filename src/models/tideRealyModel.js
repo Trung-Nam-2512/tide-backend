@@ -84,6 +84,9 @@ tideRealySchema.index({ stationCode: 1, utc: -1 });
 tideRealySchema.index({ timestamp: -1 });
 tideRealySchema.index({ utc: -1 });
 
+// Unique index để tránh duplicate records
+tideRealySchema.index({ stationCode: 1, timestamp: 1 }, { unique: true });
+
 // Virtual field để lấy ngày (chỉ date, không có time)
 tideRealySchema.virtual('date').get(function () {
     return this.utc.toISOString().split('T')[0];

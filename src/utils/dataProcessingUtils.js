@@ -152,9 +152,9 @@ class DataProcessingUtils {
         }
 
         const processedData = rawData.dtData
-            .map(item => {
+            .map((item, index) => {
                 try {
-                    return {
+                    const processedItem = {
                         data_thoigian: new Date(item.data_thoigian),
                         data_thoigian_hienthi: item.data_thoigian_hienthi,
                         luuluongxa: item.luuluongxa,
@@ -163,8 +163,18 @@ class DataProcessingUtils {
                         luuluongthuydien: item.luuluongthuydien,
                         unit: 'm³/s',
                     };
+
+                    // Log first few items for debugging
+                    if (index < 2) {
+                        console.log(`🔍 Luuluongxa processing item ${index}:`, {
+                            original: item,
+                            processed: processedItem
+                        });
+                    }
+
+                    return processedItem;
                 } catch (error) {
-                    console.warn('Failed to process Luuluongxa data item:', item, error.message);
+                    console.warn(`Failed to process Luuluongxa data item ${index}:`, item, error.message);
                     return null;
                 }
             })
@@ -181,19 +191,46 @@ class DataProcessingUtils {
      */
     static validateLuuluongxaData(processedData) {
         if (!Array.isArray(processedData) || processedData.length === 0) {
+            console.warn('⚠️ validateLuuluongxaData: Invalid array or empty data');
             return false;
         }
 
         // Check if all items have required fields
-        return processedData.every(item =>
-            item.data_thoigian instanceof Date &&
-            typeof item.data_thoigian_hienthi === 'string' &&
-            typeof item.luuluongxa === 'number' &&
-            typeof item.luuluongcong === 'number' &&
-            typeof item.luuluongtran === 'number' &&
-            (typeof item.luuluongthuydien === 'number' || item.luuluongthuydien === null) && // Allow null for luuluongthuydien
-            item.unit === 'm³/s'
-        );
+        const invalidItems = [];
+        const isValid = processedData.every((item, index) => {
+            const itemValid =
+                item.data_thoigian instanceof Date &&
+                typeof item.data_thoigian_hienthi === 'string' &&
+                typeof item.luuluongxa === 'number' &&
+                typeof item.luuluongcong === 'number' &&
+                (typeof item.luuluongtran === 'number' || item.luuluongtran === null) && // Allow null for luuluongtran
+                (typeof item.luuluongthuydien === 'number' || item.luuluongthuydien === null) && // Allow null for luuluongthuydien
+                item.unit === 'm³/s';
+
+            if (!itemValid) {
+                invalidItems.push({
+                    index,
+                    item,
+                    checks: {
+                        data_thoigian: item.data_thoigian instanceof Date,
+                        data_thoigian_hienthi: typeof item.data_thoigian_hienthi === 'string',
+                        luuluongxa: typeof item.luuluongxa === 'number',
+                        luuluongcong: typeof item.luuluongcong === 'number',
+                        luuluongtran: (typeof item.luuluongtran === 'number' || item.luuluongtran === null),
+                        luuluongthuydien: (typeof item.luuluongthuydien === 'number' || item.luuluongthuydien === null),
+                        unit: item.unit === 'm³/s'
+                    }
+                });
+            }
+
+            return itemValid;
+        });
+
+        if (!isValid && invalidItems.length > 0) {
+            console.warn('⚠️ validateLuuluongxaData: Found invalid items:', invalidItems.slice(0, 3)); // Log first 3 invalid items
+        }
+
+        return isValid;
     }
 
     /**

@@ -29,14 +29,24 @@ const fetchAllStationsData = async (force = false) => {
             const result = force ? await getTideRealyForce(stationCode) : await getTideRealy(stationCode);
 
             if (result) {
+                // Determine data source and count based on result structure
+                let dataCount = 0;
+                if (result.data && Array.isArray(result.data)) {
+                    dataCount = result.data.length;
+                } else if (result.rawData && Array.isArray(result.rawData)) {
+                    dataCount = result.rawData.length;
+                } else if (result.totalRecords) {
+                    dataCount = result.totalRecords;
+                }
+
                 results.push({
                     stationCode,
                     success: true,
                     source: result.source,
                     newRecords: result.newRecords || 0,
-                    totalRecords: result.data?.length || 0
+                    totalRecords: dataCount
                 });
-                console.log(`✅ Trạm ${stationCode}: ${result.newRecords} records mới, ${result.data?.length} records tổng`);
+                console.log(`✅ Trạm ${stationCode}: ${result.newRecords || 0} records mới, ${dataCount} records tổng`);
             } else {
                 results.push({
                     stationCode,
@@ -58,7 +68,7 @@ const fetchAllStationsData = async (force = false) => {
     console.log('📊 Tóm tắt kết quả:');
     results.forEach(result => {
         if (result.success) {
-            console.log(`  ✅ ${result.stationCode}: ${result.newRecords} records mới (${result.source})`);
+            console.log(`  ✅ ${result.stationCode}: ${result.newRecords} records mới (${result.totalRecords})`);
         } else {
             console.log(`  ❌ ${result.stationCode}: ${result.error}`);
         }

@@ -44,6 +44,7 @@ const fetchAndSave = async (payload) => {
         const dateRange = DateUtils.getDateRange(processedData);
 
         return DataProcessingUtils.createOperationResult({
+            success: true,
             message: 'All Luuluongxa data completely replaced with fresh API data',
             operation: 'fetch_and_save_luuluongxa',
             inserted: dbResult.newRecords,

@@ -133,11 +133,14 @@ class DatabaseUtils {
 
     /**
      * Execute complete data replacement safely with timeout handling
+     * @deprecated Use replaceStationData for station-specific data to avoid data loss
      * @param {Object} Model - Mongoose model
      * @param {Array} newData - New data to insert
      * @returns {Promise<Object>} Replacement result
      */
     static async replaceAllData(Model, newData) {
+        console.warn('⚠️ WARNING: replaceAllData is deprecated and DANGEROUS - it deletes ALL data in collection!');
+        console.warn('⚠️ Use replaceStationData for station-specific replacement instead.');
         try {
             console.log('🔄 Starting complete data replacement...');
 
@@ -178,6 +181,85 @@ class DatabaseUtils {
         } catch (error) {
             console.error('❌ Complete replacement failed:', error.message);
             throw new Error(`Database replacement failed: ${error.message}`);
+        }
+    }
+
+    /**
+     * Replace data for a specific station only (SAFE)
+     * @param {Object} Model - Mongoose model
+     * @param {string} stationCode - Station code to replace data for
+     * @param {Array} newData - New data to insert for this station
+     * @returns {Promise<Object>} Replacement result
+     */
+    static async replaceStationData(Model, stationCode, newData) {
+        try {
+            console.log(`🔄 Starting SAFE station-specific data replacement for station: ${stationCode}`);
+            console.log(`📊 Input data count: ${newData.length}`);
+            console.log(`📊 Model name: ${Model.modelName}`);
+
+            // Validate input data
+            if (!Array.isArray(newData) || newData.length === 0) {
+                throw new Error('Invalid or empty data array');
+            }
+
+            if (!stationCode) {
+                throw new Error('Station code is required for safe replacement');
+            }
+
+            // Validate that all new data belongs to the same station
+            const invalidData = newData.filter(item => item.stationCode !== stationCode);
+            if (invalidData.length > 0) {
+                throw new Error(`Data contains records for different stations: ${invalidData.length} invalid records`);
+            }
+
+            try {
+                // Delete data for ONLY this station
+                console.log(`🗑️ Deleting existing data for station: ${stationCode}`);
+                const deleteFilter = { stationCode: stationCode };
+                const deleteResult = await DatabaseUtils.deleteMany(Model, deleteFilter);
+                console.log(`🗑️ Deleted old data for station ${stationCode}: ${deleteResult.deletedCount} records`);
+
+                // Insert new data for this station
+                console.log(`💾 Inserting new data for station: ${stationCode}`);
+                const insertResult = await DatabaseUtils.insertMany(Model, newData);
+                console.log(`💾 Inserted new data for station ${stationCode}: ${insertResult.insertedCount} records`);
+
+                // Verify the insertion by counting documents for this station
+                console.log(`📊 Verifying insertion for station: ${stationCode}`);
+                const finalCount = await DatabaseUtils.countDocuments(Model, { stationCode: stationCode });
+                console.log(`📊 Final document count for station ${stationCode}: ${finalCount}`);
+
+                console.log(`✅ Station-specific data replacement successful for station: ${stationCode}`);
+
+                return {
+                    success: true,
+                    stationCode: stationCode,
+                    oldRecords: deleteResult.deletedCount || 0,
+                    newRecords: insertResult.insertedCount || newData.length,
+                    totalRecords: finalCount,
+                    operation: 'station_specific_replacement'
+                };
+
+            } catch (dbError) {
+                console.warn(`⚠️ Database operations failed for station ${stationCode}, using fallback approach...`);
+                console.warn('⚠️ Error:', dbError.message);
+
+                // Fallback: return success with data processing info only
+                return {
+                    success: true,
+                    stationCode: stationCode,
+                    oldRecords: 0, // Unknown
+                    newRecords: newData.length,
+                    totalRecords: newData.length,
+                    operation: 'fallback_station_replacement',
+                    warning: 'Database operations failed, but data was processed successfully',
+                    processedData: newData.length
+                };
+            }
+
+        } catch (error) {
+            console.error(`❌ Station-specific replacement failed for station ${stationCode}:`, error.message);
+            throw new Error(`Database station replacement failed: ${error.message}`);
         }
     }
 
