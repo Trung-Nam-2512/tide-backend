@@ -8,6 +8,7 @@ const qdenHoDauTiengController = require('../controllers/qdenHoDauTiengControlle
 const luuluongxaController = require('../controllers/luuluongxaController');
 const mekongController = require('../controllers/mekongController');
 const { fetchHoDauTiengDataNow, getHoDauTiengSchedulerStatus } = require('../scheduler/hodautiengScheduler');
+const { getTriAnChartData } = require("../controllers/triAnController")
 const {
     fetchMekongDataNow,
     getMekongSchedulerStatus,
@@ -49,6 +50,9 @@ router.get('/get-mekong-data-by-color', mekongController.getMekongDataByColor); 
 router.get('/mekong-health', mekongController.mekongHealthCheck); // kiểm tra tình trạng Mekong service
 router.delete('/clear-mekong-data', mekongController.clearMekongData); // xóa toàn bộ dữ liệu Mekong (admin only)
 
+
+// Trị an 
+router.get('/get-data-tri-an', getTriAnChartData)
 
 
 // Scheduler endpoints

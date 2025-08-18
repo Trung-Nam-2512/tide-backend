@@ -281,5 +281,5 @@ module.exports = {
     getTideDataFromNow,
     getTideDataByDateRange,
     getRecentTideData,
-  
+
 }

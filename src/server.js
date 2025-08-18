@@ -6,12 +6,13 @@ const tideRoutes = require('./routes/tideRoutes');
 const mongoose = require('mongoose');
 const config = require('./config/config');
 const cors = require('cors');
-
+const { saveTriAnData } = require("../src/services/triAnService")
 const connectDB = require('./dbs/mongo.init');
 const { initScheduler } = require('./scheduler/tideDataScheduler');
 const { initHoDauTiengScheduler } = require('./scheduler/hodautiengScheduler');
 const { initMekongScheduler } = require('./scheduler/mekongScheduler');
 const PORT = process.env.PORT || 5000;
+const cron = require('node-cron');
 
 // Connect to MongoDB
 connectDB();
@@ -37,24 +38,24 @@ app.get('/', (req, res) => {
     res.json({
         message: 'Hydrology Dashboard API',
         version: '1.0.0',
-        endpoints: {
-            health: '/api/v1/health',
-            fetchData: '/api/v1/fetch-tide-forecast-data',
-            getData: '/api/v1/get-tide-forecast-data',
-            getDataFromNow: '/api/v1/get-tide-data-from-now',
-            getRecentData: '/api/v1/get-recent-tide-data',
-            locations: '/api/v1/get-locations',
-            combinedData: '/api/v1/get-combined-tide-data',
-            forceFetchAll: '/api/v1/fetch-tide-realy-all'
-        },
-        features: {
-            realTime: 'Dữ liệu thủy triều từ thời điểm hiện tại đến 1 tuần sau',
-            recentData: 'Dữ liệu thủy triều gần nhất (real-time)',
-            multipleLocations: 'Hỗ trợ nhiều địa điểm',
-            scheduledData: 'Tự động gọi API thủy triều thực tế mỗi 3 giờ (0h, 3h, 6h, 9h, 12h, 15h, 18h, 21h)',
-            hodautiengScheduler: 'Tự động gọi API Hồ Dầu Tiếng mỗi 1 tiếng (mực nước hồ, lưu lượng nước, lưu lượng xả)',
-            mekongScheduler: 'Tự động gọi Mekong API mỗi 1 giờ để thu thập dữ liệu mực nước'
-        },
+        // endpoints: {
+        //     health: '/api/v1/health',
+        //     fetchData: '/api/v1/fetch-tide-forecast-data',
+        //     getData: '/api/v1/get-tide-forecast-data',
+        //     getDataFromNow: '/api/v1/get-tide-data-from-now',
+        //     getRecentData: '/api/v1/get-recent-tide-data',
+        //     locations: '/api/v1/get-locations',
+        //     combinedData: '/api/v1/get-combined-tide-data',
+        //     forceFetchAll: '/api/v1/fetch-tide-realy-all'
+        // },
+        // features: {
+        //     realTime: 'Dữ liệu thủy triều từ thời điểm hiện tại đến 1 tuần sau',
+        //     recentData: 'Dữ liệu thủy triều gần nhất (real-time)',
+        //     multipleLocations: 'Hỗ trợ nhiều địa điểm',
+        //     scheduledData: 'Tự động gọi API thủy triều thực tế mỗi 3 giờ (0h, 3h, 6h, 9h, 12h, 15h, 18h, 21h)',
+        //     hodautiengScheduler: 'Tự động gọi API Hồ Dầu Tiếng mỗi 1 tiếng (mực nước hồ, lưu lượng nước, lưu lượng xả)',
+        //     mekongScheduler: 'Tự động gọi Mekong API mỗi 1 giờ để thu thập dữ liệu mực nước'
+        // },
         timestamp: new Date().toISOString()
     });
 });
@@ -69,6 +70,14 @@ app.use((err, req, res, next) => {
         timestamp: new Date().toISOString()
     });
 });
+
+// 
+// Cron job: every 1 minute
+cron.schedule('*/1 * * * *', async () => {
+    await saveTriAnData();
+    console.log('Tri An data scraped and saved');
+});
+
 
 // 404 handler
 app.use('*', (req, res) => {
