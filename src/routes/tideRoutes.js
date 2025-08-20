@@ -62,6 +62,8 @@ router.get('/get-data-tri-an', getTriAnChartData)
 router.get('/get-station', binhDuongController.getStations); // lấy dữ liệu Binh Duong
 router.post('/fetch-triggle-manual', binhDuongController.fetchDataManually); // fetch data thủ công
 router.post('/get-binhduong-history', binhDuongController.getStationHistory);
+router.get('/get-binhduong-parameters', binhDuongController.getParametersMetadata); // lấy metadata của các parameters
+router.post('/migrate-binhduong-history', binhDuongController.migrateHistoryData); // migration cleanup history data
 
 // Scheduler endpoints
 router.get('/scheduler-status', (req, res) => { // xem trạng thái của scheduler

@@ -70,4 +70,32 @@ const getStationHistory = async (req, res, next) => {
     }
 }
 
-module.exports = { getStations, fetchDataManually, getStationHistory };
+const getParametersMetadata = async (req, res, next) => {
+    try {
+        const metadata = await binhDuongService.getParametersMetadata();
+        res.status(200).json({ 
+            success: true, 
+            data: metadata,
+            message: 'Parameters metadata retrieved successfully'
+        });
+    } catch (error) {
+        console.error('Error in getParametersMetadata:', error);
+        next(error);
+    }
+};
+
+const migrateHistoryData = async (req, res, next) => {
+    try {
+        const result = await binhDuongService.migrateHistoryData();
+        res.status(200).json({ 
+            success: true, 
+            message: 'Migration completed successfully',
+            data: result
+        });
+    } catch (error) {
+        console.error('Error in migrateHistoryData:', error);
+        next(error);
+    }
+};
+
+module.exports = { getStations, fetchDataManually, getStationHistory, getParametersMetadata, migrateHistoryData };
