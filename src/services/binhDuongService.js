@@ -1,33 +1,29 @@
+// src/services/binhDuongService.js
 const axios = require('axios');
 const BinhDuongModel = require('../models/binhDuongModel');
-const deepEqual = require('deep-equal'); // Cài thêm: npm install deep-equal để so sánh object
 
-const API_URL_BINH_DUONG = process.env.API_URL_BINH_DUONG || "https://thongtinmoitruong.quantracbinhduong.vn/api/station-auto-logs?stationType=5f55a0292fd98d0011cf5809"; // Thay bằng URL thực tế
+const API_URL = process.env.API_URL_BINH_DUONG || 'https://thongtinmoitruong.quantracbinhduong.vn/api/station-auto-logs?stationType=5f55a0292fd98d0011cf5809'; // Thay bằng URL API thật
 
 const fetchAndSaveData = async () => {
     try {
-        const response = await axios.get(API_URL_BINH_DUONG);
+        const response = await axios.get(API_URL);
         const data = response.data.data;
 
         if (!data || !Array.isArray(data)) {
-            throw new Error('Invalid API response');
+            throw new Error('Dữ liệu từ API không hợp lệ');
         }
 
-        const operations = []; // Chuẩn bị bulk operations
+        const operations = [];
 
         for (const station of data) {
-            const existing = await BinhDuongModel.findOne({ key: station.key });
+            const newReceivedAt = new Date(station.receivedAt);
+            const historyEntries = Object.entries(station.measuringLogs).map(([key, log]) => ({
+                timestamp: newReceivedAt,
+                value: log.value,
+                unit: log.unit,
+                warningLevel: log.warningLevel
+            }));
 
-            if (existing) {
-                // Kiểm tra duplicate: Nếu receivedAt không mới hơn hoặc measuringLogs giống hệt, bỏ qua
-                const newReceivedAt = new Date(station.receivedAt);
-                if (newReceivedAt <= existing.receivedAt && deepEqual(station.measuringLogs, existing.measuringLogs)) {
-                    console.log(`Skipped duplicate for station ${station.key}`);
-                    continue;
-                }
-            }
-
-            // Chuẩn bị upsert operation
             operations.push({
                 updateOne: {
                     filter: { key: station.key },
@@ -38,9 +34,10 @@ const fetchAndSaveData = async () => {
                             mapLocation: station.mapLocation,
                             province: station.province,
                             stationType: station.stationType,
-                            receivedAt: new Date(station.receivedAt),
-                            measuringLogs: station.measuringLogs
-                        }
+                            'currentData.receivedAt': newReceivedAt,
+                            'currentData.measuringLogs': station.measuringLogs
+                        },
+                        $push: { history: { $each: historyEntries } } // Thêm lịch sử
                     },
                     upsert: true
                 }
@@ -49,22 +46,27 @@ const fetchAndSaveData = async () => {
 
         if (operations.length > 0) {
             await BinhDuongModel.bulkWrite(operations);
-            console.log(`Updated ${operations.length} stations successfully`);
+            console.log(`Đã cập nhật ${operations.length} trạm với lịch sử`);
         } else {
-            console.log('No new data to update');
+            console.log('Không có dữ liệu mới để cập nhật');
         }
     } catch (error) {
-        if (error.code === 11000) { // Duplicate key error
-            console.error('Duplicate key error handled:', error.message);
-        } else {
-            console.error('Error fetching/saving Binh Duong data:', error);
-        }
-        throw error; // Ném lỗi để middleware handle
+        console.error('Lỗi khi fetch/saving dữ liệu Bình Dương:', error);
+        throw error;
     }
 };
 
 const getAllStations = async () => {
-    return await BinhDuongModel.find({}).sort({ receivedAt: -1 });
+    return await BinhDuongModel.find({}).sort({ 'currentData.receivedAt': -1 });
 };
 
-module.exports = { fetchAndSaveData, getAllStations };
+// Thêm hàm lấy lịch sử
+const getStationHistory = async (key, start, end) => {
+    const query = { key };
+    console.log(query)
+    if (start) query['history.timestamp'] = { $gte: new Date(start) };
+    if (end) query['history.timestamp'] = { ...query['history.timestamp'], $lte: new Date(end) };
+    return await BinhDuongModel.findOne(query).select('history');
+};
+
+module.exports = { fetchAndSaveData, getAllStations, getStationHistory };

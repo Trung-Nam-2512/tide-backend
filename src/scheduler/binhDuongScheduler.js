@@ -2,7 +2,7 @@ const cron = require('node-cron');
 const binhDuongService = require('../services/binhDuongService');
 
 const initBinhDuongScheduler = () => {
-    const binhDuongJob = cron.schedule('0 * * * *', async () => {
+    const binhDuongJob = cron.schedule('*/30 * * * *', async () => { // chạy mỗi 30 phút
         console.log(`⏰ Running Binh Duong scheduler at ${new Date().toISOString()}`);
         await binhDuongService.fetchAndSaveData();
     }, {
@@ -11,7 +11,7 @@ const initBinhDuongScheduler = () => {
     });
 
     console.log('Binh Duong scheduler initialized (every hour)');
-    // fetch dữ liệu sau 15 giây lần đầu tiên
+    // fetch dữ liệu sau 20 giây lần đầu tiên
     setTimeout(async () => {
         console.log('⏳ Initial fetch for Binh Duong data after 15 seconds...');
         await binhDuongService.fetchAndSaveData();
