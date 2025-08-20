@@ -15,6 +15,9 @@ const {
     getMekongSchedulerStats,
     checkMekongSchedulerHealth
 } = require('../scheduler/mekongScheduler');
+const binhDuongController = require('../controllers/binhDuongController');
+
+
 // API v1 routes
 router.get('/fetch-tide-forecast-data', tideController.triggerFetchTideData); // lấy dữ liệu từ api
 router.get('/get-tide-forecast-data', tideController.getTideData);// lấy dữ liệu từ database
@@ -53,6 +56,11 @@ router.delete('/clear-mekong-data', mekongController.clearMekongData); // xóa t
 
 // Trị an 
 router.get('/get-data-tri-an', getTriAnChartData)
+
+//
+// Binh Duong
+router.get('/get-station', binhDuongController.getStations); // lấy dữ liệu Binh Duong
+router.post('/fetch-triggle-manual', binhDuongController.fetchDataManually); // fetch data thủ công
 
 
 // Scheduler endpoints

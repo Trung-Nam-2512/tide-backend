@@ -13,6 +13,8 @@ const { initHoDauTiengScheduler } = require('./scheduler/hodautiengScheduler');
 const { initMekongScheduler } = require('./scheduler/mekongScheduler');
 const PORT = process.env.PORT || 5000;
 const cron = require('node-cron');
+const { initBinhDuongScheduler } = require('./scheduler/binhDuongScheduler');
+const binhDuongService = require('./services/binhDuongService');
 
 // Connect to MongoDB
 connectDB();
@@ -21,6 +23,7 @@ connectDB();
 app.use(cors({
     origin: [
         'http://localhost:3000',
+        'http://localhost:3001',
         'https://tide.nguyentrungnam.com',
         'https://www.tide.nguyentrungnam.com'
     ],
@@ -107,9 +110,14 @@ const server = app.listen(PORT, () => {
     // Khởi tạo Mekong Data Scheduler
     console.log('🌊 Khởi tạo Mekong Data Scheduler...');
     const { mekongJob } = initMekongScheduler();
+    // Khởi tạo Binh Duong Data Scheduler
+    console.log('🏙️ Khởi tạo Binh Duong Data Scheduler...');
+    const { binhDuongJob } = initBinhDuongScheduler();
 
+    // Log scheduler status
+    console.log('✅ Tất cả Schedulers đã được khởi tạo (Tide, Station Update, HoDauTieng, Mekong, Binh Duong)');
     // Lưu job references để có thể dừng khi cần
-    global.schedulerJobs = { tideJob, stationUpdateJob, hodautiengJob, mekongJob };
+    global.schedulerJobs = { tideJob, stationUpdateJob, hodautiengJob, mekongJob, binhDuongJob };
 });
 
 // Graceful shutdown

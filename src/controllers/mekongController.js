@@ -333,7 +333,7 @@ module.exports = {
     fetchMekongData,
     getMekongDataController,
     getRecentMekongDataController,
-    getMekongStatsController,
+    getMekongStatsController,   
     mekongHealthCheck,
     getMekongDataByColor,
     clearMekongData
