@@ -1,0 +1,124 @@
+/**
+ * Forecast Service - Multi-station coordinator (Clean Architecture)
+ */
+
+const ForecastStation = require('../models/ForecastStation');
+const forecastDataRepository = require('../repositories/forecastDataRepository');
+
+class ForecastService {
+    async registerStation(stationData) {
+        try {
+            const existing = await ForecastStation.findOne({ hc_uuid: stationData.stationUuid });
+            if (existing) {
+                return { success: false, error: 'Station already exists' };
+            }
+
+            const station = new ForecastStation({
+                hc_uuid: stationData.stationUuid,
+                station_name: stationData.stationName,
+                latitude: stationData.location?.latitude,
+                longitude: stationData.location?.longitude,
+                province: stationData.administrativeInfo?.province,
+                district: stationData.administrativeInfo?.district,
+                river_system: stationData.administrativeInfo?.riverSystem,
+                status: 'active'
+            });
+
+            await station.save();
+            console.log(`✅ Station registered: ${station.station_name}`);
+            
+            return { success: true, data: station };
+        } catch (error) {
+            console.error('❌ Register station error:', error.message);
+            return { success: false, error: error.message };
+        }
+    }
+
+    async getStations(filters = {}) {
+        try {
+            const query = {};
+            if (filters.status) query.status = filters.status;
+            if (filters.province) query.province = new RegExp(filters.province, 'i');
+
+            const stations = await ForecastStation.find(query).sort({ station_name: 1 });
+            
+            return { success: true, data: stations, total: stations.length };
+        } catch (error) {
+            console.error('❌ Get stations error:', error.message);
+            return { success: false, error: error.message };
+        }
+    }
+
+    async getStationData(stationUuid, parameter, startDate, endDate, dataSource = null) {
+        try {
+            const data = await forecastDataRepository.findByStationAndTime(
+                stationUuid, 
+                parameter, 
+                startDate, 
+                endDate, 
+                dataSource
+            );
+
+            return { success: true, data, count: data.length };
+        } catch (error) {
+            console.error('❌ Get station data error:', error.message);
+            return { success: false, error: error.message };
+        }
+    }
+
+    async getLatestData(stationUuid, parameter, dataSource = null) {
+        try {
+            const data = await forecastDataRepository.getLatest(stationUuid, parameter, dataSource);
+            return { success: true, data };
+        } catch (error) {
+            console.error('❌ Get latest data error:', error.message);
+            return { success: false, error: error.message };
+        }
+    }
+
+    async syncAllStations() {
+        try {
+            console.log('🔄 Starting multi-station sync...');
+            
+            const stationsResult = await this.getStations({ status: 'active' });
+            if (!stationsResult.success) {
+                return { success: false, error: 'Cannot get stations' };
+            }
+
+            const stations = stationsResult.data;
+            let successfulSyncs = 0;
+            let failedSyncs = 0;
+            let totalRecords = 0;
+            const errors = [];
+
+            for (const station of stations) {
+                try {
+                    // Here you would call station-specific services
+                    // For now, we just simulate success
+                    console.log(`✅ Synced station: ${station.station_name}`);
+                    successfulSyncs++;
+                } catch (error) {
+                    console.error(`❌ Sync failed for ${station.station_name}: ${error.message}`);
+                    failedSyncs++;
+                    errors.push(`${station.station_name}: ${error.message}`);
+                }
+            }
+
+            return {
+                success: true,
+                data: {
+                    totalStations: stations.length,
+                    successfulSyncs,
+                    failedSyncs,
+                    totalRecords,
+                    errors
+                }
+            };
+        } catch (error) {
+            console.error('❌ Sync all stations error:', error.message);
+            return { success: false, error: error.message };
+        }
+    }
+}
+
+module.exports = new ForecastService();

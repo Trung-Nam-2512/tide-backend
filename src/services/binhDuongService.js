@@ -17,10 +17,13 @@ const fetchAndSaveData = async () => {
 
         for (const station of data) {
             const newReceivedAt = new Date(station.receivedAt);
-            
-            // Giữ nguyên measuringLogs là Object như API trả về
-            const measuringLogs = station.measuringLogs;
-            
+            const historyEntries = Object.entries(station.measuringLogs).map(([key, log]) => ({
+                timestamp: newReceivedAt,
+                value: log.value,
+                unit: log.unit,
+                warningLevel: log.warningLevel
+            }));
+
             operations.push({
                 updateOne: {
                     filter: { key: station.key },
@@ -32,14 +35,9 @@ const fetchAndSaveData = async () => {
                             province: station.province,
                             stationType: station.stationType,
                             'currentData.receivedAt': newReceivedAt,
-                            'currentData.measuringLogs': measuringLogs
+                            'currentData.measuringLogs': station.measuringLogs
                         },
-                        $addToSet: { // Sử dụng addToSet để tránh duplicate
-                            history: {
-                                timestamp: newReceivedAt,
-                                measuringLogs: measuringLogs
-                            }
-                        }
+                        $push: { history: { $each: historyEntries } } // Thêm lịch sử
                     },
                     upsert: true
                 }
@@ -62,113 +60,13 @@ const getAllStations = async () => {
     return await BinhDuongModel.find({}).sort({ 'currentData.receivedAt': -1 });
 };
 
-// Hàm lấy lịch sử với structure mới
+// Thêm hàm lấy lịch sử
 const getStationHistory = async (key, start, end) => {
     const query = { key };
-    
-    // Tìm station
-    const station = await BinhDuongModel.findOne(query);
-    if (!station) {
-        throw new Error(`Station with key ${key} not found`);
-    }
-    
-    let history = station.history || [];
-    
-    // Filter theo thời gian
-    if (start || end) {
-        history = history.filter(entry => {
-            const entryTime = new Date(entry.timestamp);
-            if (start && entryTime < new Date(start)) return false;
-            if (end && entryTime > new Date(end)) return false;
-            return true;
-        });
-    }
-    
-    // Chuẩn hóa dữ liệu trả về cho frontend
-    const processedHistory = history.map(entry => {
-        const result = {
-            timestamp: entry.timestamp
-        };
-        
-        // Copy tất cả parameters từ measuringLogs
-        if (entry.measuringLogs) {
-            Object.entries(entry.measuringLogs).forEach(([paramKey, paramData]) => {
-                result[paramKey] = {
-                    value: paramData.value,
-                    unit: paramData.unit,
-                    name: paramData.name, // Tên hiển thị
-                    warningLevel: paramData.warningLevel
-                };
-            });
-        }
-        
-        return result;
-    });
-    
-    return { history: processedHistory };
+    // console.log(query)
+    if (start) query['history.timestamp'] = { $gte: new Date(start) };
+    if (end) query['history.timestamp'] = { ...query['history.timestamp'], $lte: new Date(end) };
+    return await BinhDuongModel.findOne(query).select('history');
 };
 
-// Hàm lấy metadata của tất cả parameters
-const getParametersMetadata = async () => {
-    const stations = await BinhDuongModel.find({}).limit(10); // Lấy một số station để analyze
-    const parametersMap = new Map();
-    
-    stations.forEach(station => {
-        // Từ currentData
-        if (station.currentData?.measuringLogs) {
-            Object.entries(station.currentData.measuringLogs).forEach(([paramKey, paramData]) => {
-                if (!parametersMap.has(paramKey)) {
-                    parametersMap.set(paramKey, {
-                        key: paramData.key,
-                        name: paramData.name,
-                        unit: paramData.unit,
-                        maxLimit: paramData.maxLimit,
-                        minLimit: paramData.minLimit
-                    });
-                }
-            });
-        }
-        
-        // Từ history
-        station.history?.forEach(entry => {
-            if (entry.measuringLogs) {
-                Object.entries(entry.measuringLogs).forEach(([paramKey, paramData]) => {
-                    if (!parametersMap.has(paramKey)) {
-                        parametersMap.set(paramKey, {
-                            key: paramData.key,
-                            name: paramData.name,
-                            unit: paramData.unit,
-                            maxLimit: paramData.maxLimit,
-                            minLimit: paramData.minLimit
-                        });
-                    }
-                });
-            }
-        });
-    });
-    
-    return Object.fromEntries(parametersMap);
-};
-
-// Hàm migration để clean data cũ và thiết lập lại structure
-const migrateHistoryData = async () => {
-    try {
-        // Xóa tất cả history entries cũ có structure sai (chỉ có timestamp)
-        const result = await BinhDuongModel.updateMany(
-            {},
-            {
-                $set: {
-                    history: [] // Reset history về empty array
-                }
-            }
-        );
-        
-        console.log(`Migration completed: ${result.modifiedCount} stations updated`);
-        return { success: true, modifiedCount: result.modifiedCount };
-    } catch (error) {
-        console.error('Migration error:', error);
-        throw error;
-    }
-};
-
-module.exports = { fetchAndSaveData, getAllStations, getStationHistory, getParametersMetadata, migrateHistoryData };
+module.exports = { fetchAndSaveData, getAllStations, getStationHistory };

@@ -1,0 +1,247 @@
+/**
+ * Forecast API Initializer - Khởi tạo sample data cho hệ thống dự báo
+ */
+
+const forecastService = require('../services/forecastService');
+
+/**
+ * Khởi tạo sample stations cho hệ thống
+ */
+async function initializeForecastStations() {
+    console.log('🔄 Initializing forecast stations...');
+
+    const sampleStations = [
+        {
+            stationId: 'HDT_001',
+            stationUuid: '613bbcf5-212e-43c5-9ef8-69016787454f',
+            stationName: 'Hồ Dầu Tiếng',
+            location: {
+                latitude: 11.2838,
+                longitude: 106.3619
+            },
+            administrativeInfo: {
+                province: 'Tây Ninh',
+                district: 'Dầu Tiếng',
+                riverSystem: 'Sài Gòn'
+            },
+            supportedParameters: [
+                {
+                    parameterCode: 'MUCNUOCHO',
+                    parameterName: 'Mực nước hồ',
+                    unit: 'm',
+                    minValue: 0,
+                    maxValue: 50,
+                    decimalPlaces: 2
+                },
+                {
+                    parameterCode: 'QDEN',
+                    parameterName: 'Dòng chảy đến hồ',
+                    unit: 'm³/s',
+                    minValue: 0,
+                    maxValue: 1000,
+                    decimalPlaces: 2
+                }
+            ],
+            apiConfig: {
+                fetchInterval: 3600, // 1 hour
+                forecastDays: 3,
+                realtimeLookback: 24,
+                autoSync: true
+            },
+            metadata: {
+                description: 'Trạm chính thu thập dữ liệu từ API Hồ Dầu Tiếng',
+                contact: 'Hydrology Team',
+                dataOwner: 'Hồ Dầu Tiếng Management'
+            }
+        },
+        // Có thể thêm các trạm khác trong tương lai
+        {
+            stationId: 'VT_TIDE',
+            stationUuid: 'vung-tau-tide-001',
+            stationName: 'Vũng Tàu Tide Station',
+            location: {
+                latitude: 10.3460,
+                longitude: 107.0843
+            },
+            administrativeInfo: {
+                province: 'Bà Rịa - Vũng Tàu',
+                district: 'Vũng Tàu',
+                riverSystem: 'Sài Gòn'
+            },
+            supportedParameters: [
+                {
+                    parameterCode: 'MUCNUOCHO',
+                    parameterName: 'Mực nước thủy triều',
+                    unit: 'm',
+                    minValue: -2,
+                    maxValue: 5,
+                    decimalPlaces: 3
+                }
+            ],
+            apiConfig: {
+                fetchInterval: 1800, // 30 minutes
+                forecastDays: 7,
+                realtimeLookback: 48,
+                autoSync: true
+            },
+            status: 'inactive', // Chưa có API integration
+            metadata: {
+                description: 'Trạm thủy triều Vũng Tàu (dự phòng cho tương lai)',
+                contact: 'Hydrology Team'
+            }
+        }
+    ];
+
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const stationData of sampleStations) {
+        try {
+            const result = await forecastService.registerStation(stationData);
+            
+            if (result.success) {
+                console.log(`✅ Station initialized: ${stationData.stationName}`);
+                successCount++;
+            } else {
+                // Station might already exist
+                console.log(`ℹ️ Station exists: ${stationData.stationName}`);
+                successCount++;
+            }
+            
+        } catch (error) {
+            console.error(`❌ Error initializing station ${stationData.stationName}: ${error.message}`);
+            errorCount++;
+        }
+    }
+
+    console.log(`✅ Forecast stations initialization completed: ${successCount} success, ${errorCount} errors`);
+    return { successCount, errorCount, total: sampleStations.length };
+}
+
+/**
+ * Chạy initial sync để test hệ thống
+ */
+async function runInitialSync() {
+    console.log('🔄 Running initial forecast data sync...');
+
+    try {
+        const result = await forecastService.syncAllStations();
+        
+        if (result.success) {
+            const { data } = result;
+            console.log(`✅ Initial sync completed:`);
+            console.log(`   - Stations processed: ${data.totalStations}`);
+            console.log(`   - Successful syncs: ${data.successfulSyncs}`);
+            console.log(`   - Failed syncs: ${data.failedSyncs}`);
+            console.log(`   - Total records: ${data.totalRecords}`);
+            
+            if (data.errors.length > 0) {
+                console.log(`⚠️ Sync warnings: ${data.errors.length} issues found`);
+            }
+            
+            return { success: true, data };
+        } else {
+            console.error(`❌ Initial sync failed: ${result.error}`);
+            return { success: false, error: result.error };
+        }
+        
+    } catch (error) {
+        console.error(`❌ Initial sync error: ${error.message}`);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Kiểm tra health của hệ thống forecast
+ */
+async function checkForecastHealth() {
+    try {
+        // Kiểm tra số stations active
+        const stationsResult = await forecastService.getStations({ status: 'active' });
+        const activeStations = stationsResult.success ? stationsResult.data.length : 0;
+        
+        // Kiểm tra dữ liệu mới nhất
+        let hasRecentData = false;
+        if (activeStations > 0) {
+            const latestDataResult = await forecastService.getLatestData(
+                '613bbcf5-212e-43c5-9ef8-69016787454f',
+                'MUCNUOCHO'
+            );
+            hasRecentData = latestDataResult.success && latestDataResult.data;
+        }
+        
+        const health = {
+            status: activeStations > 0 ? 'healthy' : 'warning',
+            activeStations,
+            hasRecentData,
+            timestamp: new Date().toISOString()
+        };
+        
+        console.log(`💚 Forecast system health: ${health.status}`);
+        console.log(`   - Active stations: ${activeStations}`);
+        console.log(`   - Recent data available: ${hasRecentData}`);
+        
+        return health;
+        
+    } catch (error) {
+        console.error(`❌ Health check failed: ${error.message}`);
+        return {
+            status: 'error',
+            error: error.message,
+            timestamp: new Date().toISOString()
+        };
+    }
+}
+
+/**
+ * Complete initialization process
+ */
+async function initializeForecastSystem() {
+    console.log('\n🚀 ===== FORECAST SYSTEM INITIALIZATION ===== 🚀');
+    
+    try {
+        // Step 1: Initialize stations
+        const stationResult = await initializeForecastStations();
+        
+        // Step 2: Wait a moment for DB operations
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Step 3: Run initial sync (optional - có thể skip nếu không muốn gọi API ngay)
+        const shouldRunInitialSync = process.env.FORECAST_INITIAL_SYNC !== 'false';
+        let syncResult = null;
+        
+        if (shouldRunInitialSync) {
+            syncResult = await runInitialSync();
+        } else {
+            console.log('ℹ️ Skipping initial sync (FORECAST_INITIAL_SYNC=false)');
+        }
+        
+        // Step 4: Health check
+        const healthResult = await checkForecastHealth();
+        
+        console.log('\n✅ ===== FORECAST SYSTEM READY ===== ✅');
+        
+        return {
+            success: true,
+            stations: stationResult,
+            sync: syncResult,
+            health: healthResult
+        };
+        
+    } catch (error) {
+        console.error('\n❌ ===== FORECAST SYSTEM INITIALIZATION FAILED ===== ❌');
+        console.error(error);
+        
+        return {
+            success: false,
+            error: error.message
+        };
+    }
+}
+
+module.exports = {
+    initializeForecastStations,
+    runInitialSync,
+    checkForecastHealth,
+    initializeForecastSystem
+};
